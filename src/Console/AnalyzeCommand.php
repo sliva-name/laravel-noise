@@ -90,5 +90,4 @@ final class AnalyzeCommand extends Command
 
         (new ConsoleReporter)->render($this, $report);
     }
-
 }

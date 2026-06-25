@@ -10,7 +10,6 @@ use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
 use LaravelAudit\Audit\AuditEngine;
 use LaravelAudit\Audit\AuditOptions;
-use LaravelAudit\Analysis\Severity;
 use LaravelAudit\Repositories\AuditReportRepository;
 
 final class AuditPanelController extends Controller

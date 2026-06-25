@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace LaravelAudit\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Carbon;
 
 /**
  * @property int $id
@@ -18,8 +19,8 @@ use Illuminate\Database\Eloquent\Model;
  * @property float $duration_seconds
  * @property array<string, mixed> $payload
  * @property array<string, mixed>|null $options
- * @property \Illuminate\Support\Carbon|null $created_at
- * @property \Illuminate\Support\Carbon|null $updated_at
+ * @property Carbon|null $created_at
+ * @property Carbon|null $updated_at
  */
 final class AuditReportRecord extends Model
 {
