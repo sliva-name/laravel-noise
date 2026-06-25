@@ -1,6 +1,14 @@
 # Laravel Audit
 
-Extensible Laravel audit package inspired by Laravel-focused tools such as ShieldCI. It combines Laravel-specific analyzers with optional Pint and PHPStan/Larastan runners.
+Extensible Laravel audit package inspired by Laravel-focused tools such as ShieldCI. It combines Laravel-specific static analyzers with optional Pint and PHPStan/Larastan runners, pattern inference, optional LLM confirmation, and a web dashboard for browsing saved reports.
+
+## Requirements
+
+- PHP 8.2+
+- Laravel 10–13
+- Optional: `laravel/pint`, `phpstan/phpstan`, `larastan/larastan` in the host application
+- Optional: OpenAI-compatible LLM endpoint (LM Studio, Ollama, etc.) for pattern confirmation
+- Web dashboard: no database required by default (reports are stored as JSON files)
 
 ## Installation
 
@@ -8,54 +16,519 @@ Extensible Laravel audit package inspired by Laravel-focused tools such as Shiel
 composer require laravel-audit/package --dev
 ```
 
-Publish the configuration when you need to tune paths, tools, or rules:
+Publish configuration:
 
 ```bash
 php artisan vendor:publish --tag=laravel-audit-config
 ```
 
-## Usage
+Publish dashboard migrations only when using database report storage:
 
 ```bash
+php artisan vendor:publish --tag=laravel-audit-migrations
+php artisan migrate
+```
+
+## Quick start
+
+### CLI
+
+```bash
+# Full audit (analyzers + Pint + PHPStan when available)
 php artisan audit:analyze
+
+# Fast run without external tools
+php artisan audit:analyze --no-tools
+
+# Save report for the web panel
+php artisan audit:analyze --no-tools --store
+```
+
+### Web panel
+
+After installation the panel is available at `/audit` by default.
+
+1. Open `http://your-app.test/audit`
+2. Use **Run Analysis** to start an audit
+3. Watch progress on the run page
+4. Open the finished report from **All Reports**
+
+For production, run a queue worker (see [Dashboard runners](#dashboard-runners)).
+
+---
+
+## Commands
+
+### `audit:analyze`
+
+Main analysis command. Runs built-in analyzers and, unless disabled, Pint and PHPStan/Larastan.
+
+```bash
+php artisan audit:analyze [options]
+```
+
+| Option | Description |
+|--------|-------------|
+| `--format=console` | Output format: `console` (default), `json`, or `sarif` |
+| `--fail-on=` | Minimum severity for a non-zero exit code: `info`, `warning`, `error`, `critical` (default from config: `error`) |
+| `--only=` | Comma-separated categories: `security`, `performance`, `reliability`, `best-practices`, `code-quality` |
+| `--no-tools` | Skip Pint and PHPStan runners |
+| `--patterns` | Enable heuristic refactoring pattern scoring |
+| `--llm` | Confirm top heuristic hypotheses with an LLM using method source code |
+| `--store` | Save the report for the web panel (when dashboard is enabled) |
+
+**Examples**
+
+```bash
 php artisan audit:analyze --format=json
 php artisan audit:analyze --format=sarif --fail-on=warning
 php artisan audit:analyze --only=security,performance
-php artisan audit:analyze --no-tools
-php artisan audit:analyze --patterns
+php artisan audit:analyze --no-tools --patterns
 php artisan audit:analyze --patterns --llm --format=json
+php artisan audit:analyze --no-tools --store
 ```
 
-The command returns a non-zero exit code when an issue meets the configured `fail_on` threshold.
+Exit code is `0` on success and `1` when at least one issue meets the `--fail-on` threshold.
+
+### `audit:run-stored`
+
+Internal command used by the web dashboard to execute a queued run. You can also run it manually:
+
+```bash
+php artisan audit:run-stored {uuid}
+```
+
+`{uuid}` is the run id from `/audit/runs/{uuid}` or from `storage/app/laravel-audit/runs/{uuid}.json`.
+
+---
+
+## Web dashboard
+
+### Routes
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/audit` | Overview and recent reports |
+| GET | `/audit/reports` | All saved reports |
+| GET | `/audit/reports/create` | Start a new analysis |
+| POST | `/audit/reports` | Queue/create a run and redirect to progress |
+| GET | `/audit/reports/{uuid}` | View a saved report |
+| GET | `/audit/runs/{uuid}` | Progress page with live status |
+| GET | `/audit/runs/{uuid}/status` | JSON progress payload (polling) |
+| POST | `/audit/runs/{uuid}/kick` | Re-dispatch background runner |
+| POST | `/audit/runs/{uuid}/execute` | Run synchronously in the HTTP request (blocks UI; fallback) |
+
+Default path prefix is `audit`. Configure with `LARAVEL_AUDIT_DASHBOARD_PATH`.
+
+### Dashboard runners
+
+Panel audits run **asynchronously** so the UI stays responsive.
+
+| Runner | Config value | How it works | When to use |
+|--------|--------------|--------------|-------------|
+| **Queue** (default) | `queue` | Dispatches `RunStoredAuditJob` | Production, local dev with `queue:work` |
+| **Process** | `process` | Detached `nohup php artisan audit:run-stored` | No queue infrastructure; requires `exec` |
+
+**Queue runner (recommended)**
+
+```env
+LARAVEL_AUDIT_DASHBOARD_RUNNER=queue
+QUEUE_CONNECTION=database   # or redis, sqs, etc.
+```
+
+```bash
+# One-time setup for database driver
+php artisan queue:table
+php artisan migrate
+
+# Keep a worker running
+php artisan queue:work
+```
+
+With `QUEUE_CONNECTION=sync`, jobs run inline during the HTTP request (fine for tests, but blocks the create request).
+
+**Process runner (fallback)**
+
+```env
+LARAVEL_AUDIT_DASHBOARD_RUNNER=process
+```
+
+Logs are written to `storage/logs/laravel-audit-{uuid}.log`.
+
+### Report storage
+
+| Driver | Config value | Location |
+|--------|--------------|----------|
+| **File** (default) | `file` | `storage/app/laravel-audit/reports/{uuid}.json` |
+| **Database** | `database` | `audit_reports` table |
+
+No database is required for the default file storage.
+
+### Protecting the panel
+
+By default the panel uses the `web` middleware group only. In production, add authentication in `config/laravel-audit.php`:
+
+```php
+'dashboard' => [
+    'middleware' => ['web', 'auth'],
+],
+```
+
+---
+
+## Configuration
+
+All options live in `config/laravel-audit.php` after publishing.
+
+### Scan paths
+
+```php
+'paths' => ['app', 'routes', 'config', 'database/migrations', 'tests'],
+'exclude' => ['vendor', 'storage', 'bootstrap/cache', 'node_modules'],
+```
+
+### Tools (Pint & PHPStan)
+
+| Key | Env | Default | Description |
+|-----|-----|---------|-------------|
+| `tools.pint.enabled` | — | `true` | Run Pint in `--test` mode |
+| `tools.pint.binary` | `LARAVEL_AUDIT_PINT_BINARY` | `vendor/bin/pint` | Pint executable |
+| `tools.phpstan.enabled` | — | `true` | Run PHPStan |
+| `tools.phpstan.binary` | `LARAVEL_AUDIT_PHPSTAN_BINARY` | `vendor/bin/phpstan` | PHPStan executable |
+| `tools.phpstan.auto_larastan` | `LARAVEL_AUDIT_PHPSTAN_AUTO_LARASTAN` | `true` | Auto-generate Larastan config when no `phpstan.neon` exists |
+| `tools.phpstan.level` | `LARAVEL_AUDIT_PHPSTAN_LEVEL` | `5` | PHPStan level for auto Larastan config |
+
+When Larastan is installed and the project has no `phpstan.neon` / `phpstan.neon.dist`, the PHPStan runner generates a temporary Larastan configuration using `paths` and `tools.phpstan.level`.
+
+### Reporting
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `reporting.default_format` | `console` | Default CLI output format |
+| `reporting.fail_on` | `error` | Default `--fail-on` threshold |
+
+### Dashboard
+
+| Key | Env | Default | Description |
+|-----|-----|---------|-------------|
+| `dashboard.enabled` | `LARAVEL_AUDIT_DASHBOARD` | `true` | Enable routes and views |
+| `dashboard.path` | `LARAVEL_AUDIT_DASHBOARD_PATH` | `audit` | URL prefix |
+| `dashboard.middleware` | — | `['web']` | Route middleware |
+| `dashboard.storage` | `LARAVEL_AUDIT_DASHBOARD_STORAGE` | `file` | `file` or `database` |
+| `dashboard.storage_path` | `LARAVEL_AUDIT_DASHBOARD_STORAGE_PATH` | — | Custom reports directory |
+| `dashboard.runs_path` | `LARAVEL_AUDIT_DASHBOARD_RUNS_PATH` | — | Custom in-progress runs directory |
+| `dashboard.runner` | `LARAVEL_AUDIT_DASHBOARD_RUNNER` | `queue` | `queue` or `process` |
+| `dashboard.queue_connection` | `LARAVEL_AUDIT_DASHBOARD_QUEUE_CONNECTION` | — | Queue connection (default: app default) |
+| `dashboard.queue` | `LARAVEL_AUDIT_DASHBOARD_QUEUE` | `default` | Queue name |
+
+Default storage paths:
+
+- Reports: `storage/app/laravel-audit/reports/`
+- Runs: `storage/app/laravel-audit/runs/`
+
+### Thresholds
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `thresholds.nesting_depth` | `4` | Max nesting depth before `code-quality.nesting-depth` fires |
 
 ### Pattern inference
 
-Two layers:
+| Key | Env | Default | Description |
+|-----|-----|---------|-------------|
+| `patterns.enabled` | `LARAVEL_AUDIT_PATTERNS` | `false` | Enable heuristic patterns from CLI/config (without `--patterns` flag) |
+| `patterns.min_confidence` | `LARAVEL_AUDIT_PATTERN_MIN_CONFIDENCE` | `0.55` | Minimum score to include a suggestion |
+| `patterns.limit` | `LARAVEL_AUDIT_PATTERN_LIMIT` | `20` | Max heuristic suggestions |
+| `patterns.model_path` | `LARAVEL_AUDIT_PATTERN_MODEL` | package `pattern-model.json` | Custom model file |
+| `patterns.llm.enabled` | `LARAVEL_AUDIT_PATTERN_LLM` | `false` | Enable LLM from config |
+| `patterns.llm.provider` | `LARAVEL_AUDIT_PATTERN_LLM_PROVIDER` | `openai_compatible` | LLM provider |
+| `patterns.llm.endpoint` | `LARAVEL_AUDIT_PATTERN_LLM_ENDPOINT` | `http://127.0.0.1:1234/v1/chat/completions` | Chat completions URL |
+| `patterns.llm.model` | `LARAVEL_AUDIT_PATTERN_LLM_MODEL` | `local-model` | Model name |
+| `patterns.llm.api_key` | `LARAVEL_AUDIT_PATTERN_LLM_API_KEY` | — | API key (optional for local servers) |
+| `patterns.llm.timeout` | `LARAVEL_AUDIT_PATTERN_LLM_TIMEOUT` | `120` | HTTP timeout (seconds) |
+| `patterns.llm.review_limit` | `LARAVEL_AUDIT_PATTERN_LLM_REVIEW_LIMIT` | `3` | Max methods sent to LLM |
+| `patterns.llm.refine_top` | `LARAVEL_AUDIT_PATTERN_LLM_REFINE_TOP` | `3` | Legacy alias for review limit |
 
-1. **Heuristic model** (`--patterns`) — AST features + weighted scores from `resources/pattern-model.json`.
-2. **LLM confirmation** (`--llm`) — takes the top heuristic hypothesis per method, sends the method source code, and asks the model to confirm or reject that hypothesis with code evidence. The model does not pick patterns from scratch.
+### Rules
 
-```bash
-php artisan audit:analyze --patterns
-php artisan audit:analyze --llm
-php artisan audit:analyze --patterns --llm
+Each analyzer can be toggled in `rules`:
+
+```php
+'rules' => [
+    'security.raw-sql' => true,
+    // ...
+],
 ```
 
-When both flags are used, raw heuristic suggestions (`source: heuristic`) and confirmed ones (`source: confirmed`) are reported separately.
+Set a rule to `false` to disable it without removing the analyzer from the package.
 
-When Larastan is installed in the target project and no `phpstan.neon` / `phpstan.neon.dist` exists, the PHPStan runner automatically generates a temporary Larastan configuration using `laravel-audit.paths` and `tools.phpstan.level`. Disable this with `tools.phpstan.auto_larastan => false` or `LARAVEL_AUDIT_PHPSTAN_AUTO_LARASTAN=false`.
+---
 
-## Built-In Categories
+## Environment examples
 
-- `security`: raw SQL, mass assignment, weak validation, debug defaults, command injection, eval usage, hardcoded credentials, and unguarded models.
-- `performance`: N+1 candidates and synchronous heavy jobs.
-- `reliability`: missing transaction candidates, `env()` outside config, and superglobal access.
-- `best-practices`: inline validation, large controllers, route closures with business logic, and silent catch blocks.
-- `code-quality`: long methods, large classes, nesting depth, redundant guards, boolean returns, null coalesce fallbacks, empty foreach guards, catch/rethrow blocks, and else-after-exit nesting.
-- `tooling`: Pint and PHPStan/Larastan findings.
+### Minimal (CLI + panel, no LLM)
 
-## Adding Analyzers
+```env
+LARAVEL_AUDIT_DASHBOARD=true
+LARAVEL_AUDIT_DASHBOARD_PATH=audit
+LARAVEL_AUDIT_DASHBOARD_RUNNER=queue
+QUEUE_CONNECTION=database
 
-Implement `LaravelAudit\Analysis\AnalyzerInterface`, return normalized `Issue` objects, and register the analyzer in `AuditServiceProvider` or a consuming app service provider.
+LARAVEL_AUDIT_PATTERNS=false
+LARAVEL_AUDIT_PATTERN_LLM=false
+```
+
+### Full (patterns + local LLM + queue)
+
+```env
+LARAVEL_AUDIT_DASHBOARD=true
+LARAVEL_AUDIT_DASHBOARD_RUNNER=queue
+QUEUE_CONNECTION=database
+
+LARAVEL_AUDIT_PATTERNS=true
+LARAVEL_AUDIT_PATTERN_LLM=true
+LARAVEL_AUDIT_PATTERN_LLM_ENDPOINT=http://127.0.0.1:1234/v1/chat/completions
+LARAVEL_AUDIT_PATTERN_LLM_MODEL=google/gemma-4-e4b
+```
+
+### No queue, no database (process runner + file storage)
+
+```env
+LARAVEL_AUDIT_DASHBOARD=true
+LARAVEL_AUDIT_DASHBOARD_RUNNER=process
+LARAVEL_AUDIT_DASHBOARD_STORAGE=file
+```
+
+---
+
+## Built-in analyzers
+
+### Security
+
+| Rule ID | Detects |
+|---------|---------|
+| `security.raw-sql` | Raw SQL / `DB::raw` usage |
+| `security.mass-assignment` | Unprotected mass assignment |
+| `security.weak-validation` | Weak inline validation |
+| `security.debug-configuration` | Debug-friendly defaults in config |
+| `security.command-injection` | Shell/command injection risks |
+| `security.eval-usage` | `eval()` usage |
+| `security.hardcoded-credentials` | Hardcoded secrets |
+| `security.unguarded-model` | `$guarded = []` models |
+
+### Performance
+
+| Rule ID | Detects |
+|---------|---------|
+| `performance.n-plus-one-candidate` | Possible N+1 query patterns |
+| `performance.sync-heavy-job` | Heavy work in non-queue jobs |
+
+### Reliability
+
+| Rule ID | Detects |
+|---------|---------|
+| `reliability.missing-transaction` | Multi-step writes without transactions |
+| `reliability.env-access-outside-config` | `env()` outside config files |
+| `reliability.global-variables` | Superglobal access |
+
+### Best practices
+
+| Rule ID | Detects |
+|---------|---------|
+| `best-practices.missing-form-request` | Inline validation instead of Form Requests |
+| `best-practices.fat-controller` | Oversized controllers |
+| `best-practices.logic-in-routes` | Business logic in route closures |
+| `best-practices.silent-failure` | Empty catch blocks / swallowed errors |
+
+### Code quality
+
+| Rule ID | Detects |
+|---------|---------|
+| `code-quality.long-method` | Methods exceeding length threshold |
+| `code-quality.large-class` | Classes with too many lines |
+| `code-quality.nesting-depth` | Deep nesting |
+| `code-quality.redundant-boolean-return` | Redundant boolean return patterns |
+| `code-quality.redundant-null-coalesce` | Useless null coalesce |
+| `code-quality.redundant-empty-foreach-guard` | Empty check before foreach |
+| `code-quality.redundant-catch-rethrow` | Catch/rethrow without value |
+| `code-quality.redundant-else-after-exit` | Else after return/throw |
+| `code-quality.redundant-type-guard` | Redundant type/is/instance checks |
+
+### Tooling
+
+When not using `--no-tools`, findings from **Pint** and **PHPStan/Larastan** are merged into the report.
+
+---
+
+## Pattern inference
+
+Two independent layers:
+
+### 1. Heuristic model (`--patterns` or `patterns.enabled`)
+
+Extracts AST features per method and scores them against `resources/pattern-model.json` (logistic-style weighted model).
+
+Known patterns:
+
+- `strategy`
+- `action` (Action / Use Case)
+- `repository`
+- `value_object`
+- `guard_clauses`
+- `extract_method`
+- `dependency_injection`
+- `form_request`
+
+Output uses `source: heuristic`. Existing audit findings can boost pattern scores (`finding_boosts` in the model file).
+
+### 2. LLM confirmation (`--llm` or `patterns.llm.enabled`)
+
+Does **not** pick patterns from scratch. For each top heuristic hypothesis it sends:
+
+- pattern slug and title
+- structural facts (lines, branches, etc.)
+- **method source code**
+
+The model must **confirm or reject** the hypothesis with code evidence. Only confirmed items appear with `source: confirmed`.
+
+```bash
+php artisan audit:analyze --patterns          # heuristic only
+php artisan audit:analyze --llm               # LLM only (needs config/flag for heuristics to produce hypotheses)
+php artisan audit:analyze --patterns --llm    # both layers
+```
+
+Compatible with OpenAI-compatible APIs (LM Studio, Ollama, etc.).
+
+---
+
+## Report formats
+
+### Console (default)
+
+Human-readable summary grouped by severity, suitable for local development and CI logs.
+
+### JSON
+
+```bash
+php artisan audit:analyze --format=json
+```
+
+Structured payload with `summary`, `issues`, `tools`, `patternSuggestions`, and `durationSeconds`. Suitable for scripting and dashboards.
+
+### SARIF
+
+```bash
+php artisan audit:analyze --format=sarif
+```
+
+SARIF 2.1.0 for GitHub Code Scanning and compatible tools.
+
+---
+
+## CI integration
+
+```yaml
+- name: Run Laravel Audit
+  run: php artisan audit:analyze --no-tools --fail-on=error
+```
+
+With Pint and PHPStan in CI:
+
+```yaml
+- name: Run Laravel Audit
+  run: php artisan audit:analyze --fail-on=error --format=sarif > audit.sarif
+```
+
+Store reports from CI into the panel:
+
+```yaml
+- name: Run and store audit
+  run: php artisan audit:analyze --no-tools --store
+```
+
+Ensure the CI environment has write access to `storage/app/laravel-audit/` when using file storage.
+
+---
+
+## Extending the package
+
+### Adding analyzers
+
+1. Implement `LaravelAudit\Analysis\AnalyzerInterface`
+2. Return normalized `LaravelAudit\Analysis\Issue` objects
+3. Register the analyzer in `AuditServiceProvider` or a consuming app service provider
+
+```php
+use LaravelAudit\Analysis\AnalyzerInterface;
+use LaravelAudit\Analysis\AnalysisContext;
+use LaravelAudit\Analysis\Category;
+
+final class CustomAnalyzer implements AnalyzerInterface
+{
+    public function id(): string
+    {
+        return 'best-practices.custom-rule';
+    }
+
+    public function category(): Category
+    {
+        return Category::BestPractices;
+    }
+
+    public function analyze(AnalysisContext $context): array
+    {
+        return [];
+    }
+}
+```
+
+Add a toggle under `rules` in config and register the class in `AuditServiceProvider`.
 
 Analyzers should report evidence and recommendations. If a rule cannot prove a defect statically, phrase the issue as a candidate or risk.
+
+### Custom pattern model
+
+Publish or point to your own JSON model:
+
+```env
+LARAVEL_AUDIT_PATTERN_MODEL=/path/to/custom-pattern-model.json
+```
+
+---
+
+## Troubleshooting
+
+### Panel audit stuck on `QUEUED`
+
+- **Queue runner:** ensure `php artisan queue:work` is running
+- Check failed jobs: `php artisan queue:failed`
+- Verify `QUEUE_CONNECTION` is not `sync` if you want a non-blocking UI
+- Use **Retry start** on the progress page or run manually: `php artisan audit:run-stored {uuid}`
+
+### Panel blocks the whole site during audit
+
+- You are likely using `--execute` / foreground fallback or `QUEUE_CONNECTION=sync`
+- Switch to `LARAVEL_AUDIT_DASHBOARD_RUNNER=queue` with a real queue driver and a worker
+
+### Process runner does nothing
+
+- Check `function_exists('exec')` is true
+- Inspect `storage/logs/laravel-audit-{uuid}.log`
+- Switch to queue runner for production
+
+### LLM returns empty or invalid JSON
+
+- LM Studio: use an OpenAI-compatible endpoint; some models need `/no_think` or lower `review_limit`
+- Increase `LARAVEL_AUDIT_PATTERN_LLM_TIMEOUT` for slow local models
+- Test with `--patterns --llm --format=json` before using the panel
+
+### PHPStan/Larastan not found
+
+- Install dev dependencies in the host app: `composer require --dev larastan/larastan`
+- Or use `--no-tools` to run built-in analyzers only
+
+---
+
+## License
+
+MIT
