@@ -15,8 +15,11 @@ use LaravelAudit\Analyzers\CodeQuality\LongMethodAnalyzer;
 use LaravelAudit\Analyzers\CodeQuality\NestingDepthAnalyzer;
 use LaravelAudit\Analyzers\CodeQuality\RedundantBooleanReturnAnalyzer;
 use LaravelAudit\Analyzers\CodeQuality\RedundantCatchRethrowAnalyzer;
+use LaravelAudit\Analyzers\CodeQuality\RedundantClassExistsAnalyzer;
+use LaravelAudit\Analyzers\CodeQuality\RedundantConfigFallbackAnalyzer;
 use LaravelAudit\Analyzers\CodeQuality\RedundantElseAfterExitAnalyzer;
 use LaravelAudit\Analyzers\CodeQuality\RedundantEmptyForeachGuardAnalyzer;
+use LaravelAudit\Analyzers\CodeQuality\RedundantMethodExistsAnalyzer;
 use LaravelAudit\Analyzers\CodeQuality\RedundantNullCoalesceAnalyzer;
 use LaravelAudit\Analyzers\CodeQuality\RedundantTypeGuardAnalyzer;
 use LaravelAudit\Analyzers\Performance\NPlusOneCandidateAnalyzer;
@@ -162,6 +165,9 @@ final class AuditServiceProvider extends ServiceProvider
                 new RedundantCatchRethrowAnalyzer,
                 new RedundantElseAfterExitAnalyzer,
                 new RedundantTypeGuardAnalyzer,
+                new RedundantMethodExistsAnalyzer,
+                new RedundantClassExistsAnalyzer,
+                new RedundantConfigFallbackAnalyzer,
             ]);
         });
     }

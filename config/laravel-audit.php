@@ -98,5 +98,8 @@ return [
         'code-quality.redundant-catch-rethrow' => true,
         'code-quality.redundant-else-after-exit' => true,
         'code-quality.redundant-type-guard' => true,
+        'code-quality.redundant-method-exists' => true,
+        'code-quality.redundant-class-exists' => true,
+        'code-quality.redundant-config-fallback' => true,
     ],
 ];

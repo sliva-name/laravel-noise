@@ -353,6 +353,9 @@ LARAVEL_AUDIT_DASHBOARD_STORAGE=file
 | `code-quality.redundant-catch-rethrow` | Catch/rethrow without value |
 | `code-quality.redundant-else-after-exit` | Else after return/throw |
 | `code-quality.redundant-type-guard` | Redundant type/is/instance checks |
+| `code-quality.redundant-method-exists` | `method_exists()` on typed dependencies |
+| `code-quality.redundant-class-exists` | `class_exists()` for app classes |
+| `code-quality.redundant-config-fallback` | `config('key') ?? $default` instead of `config('key', $default)` |
 
 ### Tooling
 
