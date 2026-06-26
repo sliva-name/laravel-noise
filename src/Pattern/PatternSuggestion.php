@@ -26,12 +26,18 @@ final readonly class PatternSuggestion
         public string $source = 'heuristic',
     ) {}
 
+    public function hypothesisKey(): string
+    {
+        return PatternHypothesisKey::for($this);
+    }
+
     /**
      * @return array<string, mixed>
      */
     public function toArray(): array
     {
         return [
+            'hypothesisKey' => $this->hypothesisKey(),
             'pattern' => $this->pattern,
             'title' => $this->title,
             'description' => $this->description,

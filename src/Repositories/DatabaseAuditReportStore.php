@@ -8,6 +8,8 @@ use Illuminate\Support\Str;
 use LaravelAudit\Audit\AuditOptions;
 use LaravelAudit\Models\AuditReportRecord;
 use LaravelAudit\Models\AuditReportSnapshot;
+use LaravelAudit\Pattern\PatternReportMerger;
+use LaravelAudit\Pattern\PatternSuggestion;
 use LaravelAudit\Reporting\AuditReport;
 use LaravelAudit\Repositories\Contracts\AuditReportStore;
 
@@ -58,6 +60,33 @@ final class DatabaseAuditReportStore implements AuditReportStore
             ->first();
 
         return $record === null ? null : $this->toSnapshot($record);
+    }
+
+    /**
+     * @param  list<PatternSuggestion>  $confirmed
+     * @param  list<string>  $confirmedKeys
+     */
+    public function mergePatternSuggestions(string $uuid, array $confirmed, array $confirmedKeys): AuditReportSnapshot
+    {
+        $record = AuditReportRecord::query()->where('uuid', $uuid)->first();
+
+        if ($record === null) {
+            throw new \RuntimeException("Audit report [{$uuid}] was not found.");
+        }
+
+        $payload = $record->payload;
+        $payload['patternSuggestions'] = PatternReportMerger::merge(
+            is_array($payload['patternSuggestions'] ?? null) ? $payload['patternSuggestions'] : [],
+            $confirmed,
+            $confirmedKeys,
+        );
+
+        $record->update([
+            'pattern_count' => count($payload['patternSuggestions']),
+            'payload' => $payload,
+        ]);
+
+        return $this->toSnapshot($record->fresh() ?? $record);
     }
 
     private function toSnapshot(AuditReportRecord $record): AuditReportSnapshot

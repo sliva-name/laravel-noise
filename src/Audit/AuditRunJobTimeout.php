@@ -17,13 +17,18 @@ final class AuditRunJobTimeout
             return max(60, $base);
         }
 
+        $llmTimeout = (int) data_get($config, 'patterns.llm.timeout', 120);
+
+        if ($options->llmHypothesisKeys !== []) {
+            return max(60, $base + ($llmTimeout * count($options->llmHypothesisKeys)));
+        }
+
         $llmOverride = data_get($config, 'dashboard.llm_job_timeout');
 
         if (is_numeric($llmOverride) && (int) $llmOverride > 0) {
             return max(60, (int) $llmOverride);
         }
 
-        $llmTimeout = (int) data_get($config, 'patterns.llm.timeout', 120);
         $maxAttempts = self::maxLlmAttempts($config);
 
         return max(60, $base + ($llmTimeout * $maxAttempts));

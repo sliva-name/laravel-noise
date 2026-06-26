@@ -16,14 +16,18 @@
                     Skip Pint and PHPStan
                 </label>
                 <label>
-                    <input type="checkbox" name="patterns" value="1">
+                    <input type="checkbox" name="patterns" value="1" id="patterns-option">
                     Include heuristic pattern scoring
                 </label>
                 <label>
                     <input type="checkbox" name="llm" value="1">
-                    Confirm patterns with LLM
+                    Confirm top hypotheses with LLM automatically
                 </label>
             </div>
+
+            <p class="muted" style="margin-top:-8px;">
+                To pick specific hypotheses manually, run with patterns only and confirm them on the report page after the audit finishes.
+            </p>
 
             <div class="form-row">
                 <label>

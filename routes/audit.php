@@ -17,6 +17,7 @@ Route::middleware($middleware)
         Route::get('/reports/create', [AuditPanelController::class, 'create'])->name('reports.create');
         Route::post('/reports', [AuditPanelController::class, 'store'])->name('reports.store');
         Route::get('/reports/{uuid}', [AuditPanelController::class, 'show'])->name('reports.show');
+        Route::post('/reports/{uuid}/confirm-patterns', [AuditPanelController::class, 'confirmPatterns'])->name('reports.confirm-patterns');
         Route::get('/runs', [AuditPanelController::class, 'runsIndex'])->name('runs.index');
         Route::get('/runs/{uuid}', [AuditPanelController::class, 'runShow'])->name('runs.show');
         Route::get('/runs/{uuid}/status', [AuditPanelController::class, 'runStatus'])->name('runs.status');

@@ -8,6 +8,8 @@ use Illuminate\Support\Carbon;
 use Illuminate\Support\Str;
 use LaravelAudit\Audit\AuditOptions;
 use LaravelAudit\Models\AuditReportSnapshot;
+use LaravelAudit\Pattern\PatternReportMerger;
+use LaravelAudit\Pattern\PatternSuggestion;
 use LaravelAudit\Reporting\AuditReport;
 use LaravelAudit\Repositories\Contracts\AuditReportStore;
 
@@ -82,6 +84,49 @@ final class FileAuditReportStore implements AuditReportStore
         $data = $this->readFile($path);
 
         return $data === null ? null : AuditReportSnapshot::fromArray($data);
+    }
+
+    /**
+     * @param  list<PatternSuggestion>  $confirmed
+     * @param  list<string>  $confirmedKeys
+     */
+    public function mergePatternSuggestions(string $uuid, array $confirmed, array $confirmedKeys): AuditReportSnapshot
+    {
+        $snapshot = $this->findByUuid($uuid);
+
+        if ($snapshot === null) {
+            throw new \RuntimeException("Audit report [{$uuid}] was not found.");
+        }
+
+        $payload = $snapshot->payload;
+        $payload['patternSuggestions'] = PatternReportMerger::merge(
+            is_array($payload['patternSuggestions'] ?? null) ? $payload['patternSuggestions'] : [],
+            $confirmed,
+            $confirmedKeys,
+        );
+
+        $updated = new AuditReportSnapshot(
+            uuid: $snapshot->uuid,
+            critical_count: $snapshot->critical_count,
+            error_count: $snapshot->error_count,
+            warning_count: $snapshot->warning_count,
+            info_count: $snapshot->info_count,
+            issues_count: $snapshot->issues_count,
+            pattern_count: count($payload['patternSuggestions']),
+            duration_seconds: $snapshot->duration_seconds,
+            payload: $payload,
+            options: $snapshot->options,
+            created_at: $snapshot->created_at,
+        );
+
+        $path = $this->pathFor($uuid);
+        $written = file_put_contents($path, json_encode($updated->toArray(), JSON_THROW_ON_ERROR | JSON_PRETTY_PRINT));
+
+        if ($written === false) {
+            throw new \RuntimeException("Unable to write audit report to [{$path}].");
+        }
+
+        return $updated;
     }
 
     private function pathFor(string $uuid): string

@@ -7,7 +7,9 @@ namespace LaravelAudit\Audit;
 use Illuminate\Contracts\Foundation\Application;
 use LaravelAudit\Analysis\AnalysisContext;
 use LaravelAudit\Analysis\AnalyzerRegistry;
+use LaravelAudit\Analysis\IssueFactory;
 use LaravelAudit\Pattern\PatternAdvisorFactory;
+use LaravelAudit\Pattern\PatternSuggestion;
 use LaravelAudit\Project\ProjectScanner;
 use LaravelAudit\Reporting\AuditReport;
 use LaravelAudit\Runners\PhpStanRunner;
@@ -89,7 +91,11 @@ final class AuditEngine
             }
 
             $patternAdvisor = $this->patternAdvisorFactory->make($config, $useHeuristic, $useLlm);
-            $patternSuggestions = $patternAdvisor->suggest($context->project, $issues);
+            $patternSuggestions = $patternAdvisor->suggest(
+                $context->project,
+                $issues,
+                $options->llmHypothesisKeys,
+            );
         }
 
         $this->progress('Finalizing report', ++$step, $totalSteps);
@@ -100,6 +106,32 @@ final class AuditEngine
             durationSeconds: microtime(true) - $startedAt,
             patternSuggestions: $patternSuggestions,
         );
+    }
+
+    /**
+     * @param  list<string>  $hypothesisKeys
+     * @param  array<string, mixed>  $reportPayload
+     * @return list<PatternSuggestion>
+     */
+    public function confirmStoredReportPatterns(array $hypothesisKeys, array $reportPayload): array
+    {
+        if ($hypothesisKeys === []) {
+            return [];
+        }
+
+        @set_time_limit(0);
+
+        $config = config('laravel-audit', []);
+        $context = new AnalysisContext(
+            $this->app->basePath(),
+            $this->scanner->scan($config),
+            $config,
+        );
+        $issues = IssueFactory::fromReportPayload($reportPayload);
+
+        return $this->patternAdvisorFactory
+            ->make($config, useHeuristic: false, useLlm: true)
+            ->suggest($context->project, $issues, $hypothesisKeys);
     }
 
     /**

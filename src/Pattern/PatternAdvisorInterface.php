@@ -11,7 +11,8 @@ interface PatternAdvisorInterface
 {
     /**
      * @param  list<Issue>  $issues
+     * @param  list<string>  $llmHypothesisKeys
      * @return list<PatternSuggestion>
      */
-    public function suggest(ProjectIndex $project, array $issues): array;
+    public function suggest(ProjectIndex $project, array $issues, array $llmHypothesisKeys = []): array;
 }

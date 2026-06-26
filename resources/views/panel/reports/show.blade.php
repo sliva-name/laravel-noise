@@ -35,6 +35,41 @@
         @endforelse
     </div>
 
+    @php
+        $heuristicPatterns = collect($report['patternSuggestions'] ?? [])
+            ->filter(fn (array $pattern): bool => ($pattern['source'] ?? 'heuristic') === 'heuristic')
+            ->values();
+    @endphp
+
+    @if ($heuristicPatterns->isNotEmpty())
+        <div class="card">
+            <h2 style="margin-top:0;">Confirm hypotheses with LLM</h2>
+            <p class="muted">Select heuristic hypotheses to validate against method source code. Unselected items stay heuristic-only.</p>
+
+            <form method="post" action="{{ route('laravel-audit.reports.confirm-patterns', $record->uuid) }}">
+                @csrf
+
+                @foreach ($heuristicPatterns as $pattern)
+                    <label class="pattern" style="display:block;">
+                        <input
+                            type="checkbox"
+                            name="llm_hypotheses[]"
+                            value="{{ $pattern['hypothesisKey'] ?? (($pattern['pattern'] ?? '').':'.($pattern['location']['file'] ?? '').'::'.($pattern['location']['method'] ?? '')) }}"
+                            style="margin-right:8px;"
+                        >
+                        <strong>{{ $pattern['title'] ?? $pattern['pattern'] }}</strong>
+                        <span class="muted">({{ number_format(($pattern['confidence'] ?? 0) * 100, 0) }}%)</span>
+                        <div class="muted">{{ $pattern['location']['class'] ?? '' }}::{{ $pattern['location']['method'] ?? '' }}()</div>
+                        <div>{{ $pattern['description'] ?? '' }}</div>
+                        <div class="muted"><code>{{ $pattern['hypothesisKey'] ?? '' }}</code></div>
+                    </label>
+                @endforeach
+
+                <button class="btn" type="submit" style="margin-top:16px;">Confirm selected with LLM</button>
+            </form>
+        </div>
+    @endif
+
     @if (! empty($report['patternSuggestions']))
         <div class="card">
             <h2 style="margin-top:0;">Pattern suggestions</h2>

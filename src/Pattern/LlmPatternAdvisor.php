@@ -25,16 +25,22 @@ final class LlmPatternAdvisor implements PatternAdvisorInterface
 
     /**
      * @param  list<Issue>  $issues
+     * @param  list<string>  $llmHypothesisKeys
      * @return list<PatternSuggestion>
      */
-    public function suggest(ProjectIndex $project, array $issues): array
+    public function suggest(ProjectIndex $project, array $issues, array $llmHypothesisKeys = []): array
     {
         $heuristic = $this->heuristicAdvisor->suggest($project, $issues);
         $suggestions = [];
         $attempts = 0;
+        $selectedKeys = $llmHypothesisKeys !== [];
+        $queue = $selectedKeys
+            ? $this->selectedHypotheses($heuristic, $llmHypothesisKeys)
+            : $this->topHypothesesByMethod($heuristic);
+        $confirmationLimit = $selectedKeys ? count($queue) : $this->reviewLimit;
 
-        foreach ($this->topHypothesesByMethod($heuristic) as $hypothesis) {
-            if (count($suggestions) >= $this->reviewLimit || $attempts >= $this->maxAttempts) {
+        foreach ($queue as $hypothesis) {
+            if (count($suggestions) >= $confirmationLimit || $attempts >= $this->maxAttempts) {
                 break;
             }
 
@@ -104,6 +110,30 @@ final class LlmPatternAdvisor implements PatternAdvisorInterface
         );
 
         return $hypotheses;
+    }
+
+    /**
+     * @param  list<PatternSuggestion>  $heuristic
+     * @param  list<string>  $keys
+     * @return list<PatternSuggestion>
+     */
+    private function selectedHypotheses(array $heuristic, array $keys): array
+    {
+        $byKey = [];
+
+        foreach ($heuristic as $suggestion) {
+            $byKey[PatternHypothesisKey::for($suggestion)] = $suggestion;
+        }
+
+        $selected = [];
+
+        foreach ($keys as $key) {
+            if (isset($byKey[$key])) {
+                $selected[] = $byKey[$key];
+            }
+        }
+
+        return $selected;
     }
 
     private function findFile(ProjectIndex $project, string $relativePath): ?PhpFile

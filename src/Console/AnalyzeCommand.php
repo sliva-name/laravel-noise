@@ -22,7 +22,8 @@ final class AnalyzeCommand extends Command
         {--only= : Comma-separated analyzer categories to run}
         {--no-tools : Skip Pint and PHPStan runners}
         {--patterns : Score refactoring patterns with the weighted heuristic model}
-        {--llm : Confirm heuristic pattern hypotheses against method source code}
+        {--llm : Confirm top heuristic pattern hypotheses with an LLM}
+        {--llm-pick=* : Confirm only selected hypothesis keys with an LLM (pattern:file::method)}
         {--store : Save the report to the audit panel database}';
 
     protected $description = 'Analyze a Laravel project with Pint, PHPStan/Larastan, and Laravel-specific audit rules.';
@@ -30,11 +31,18 @@ final class AnalyzeCommand extends Command
     public function handle(AuditEngine $engine, AuditReportRepository $reports): int
     {
         $config = config('laravel-audit', []);
+        $llmHypothesisKeys = array_values(array_filter(array_map(
+            strval(...),
+            (array) $this->option('llm-pick'),
+        )));
+        $useLlm = (bool) $this->option('llm') || $llmHypothesisKeys !== [];
+
         $options = new AuditOptions(
             categories: $this->categories(),
             noTools: (bool) $this->option('no-tools'),
-            patterns: (bool) $this->option('patterns'),
-            llm: (bool) $this->option('llm'),
+            patterns: (bool) $this->option('patterns') || $useLlm,
+            llm: $useLlm,
+            llmHypothesisKeys: $llmHypothesisKeys,
             failOn: $this->failOn($config),
         );
 

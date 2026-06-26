@@ -18,9 +18,10 @@ final class CompositePatternAdvisor implements PatternAdvisorInterface
 
     /**
      * @param  list<Issue>  $issues
+     * @param  list<string>  $llmHypothesisKeys
      * @return list<PatternSuggestion>
      */
-    public function suggest(ProjectIndex $project, array $issues): array
+    public function suggest(ProjectIndex $project, array $issues, array $llmHypothesisKeys = []): array
     {
         $suggestions = [];
 
@@ -29,7 +30,7 @@ final class CompositePatternAdvisor implements PatternAdvisorInterface
         }
 
         if ($this->includeLlm) {
-            array_push($suggestions, ...$this->llm->suggest($project, $issues));
+            array_push($suggestions, ...$this->llm->suggest($project, $issues, $llmHypothesisKeys));
         }
 
         return $suggestions;

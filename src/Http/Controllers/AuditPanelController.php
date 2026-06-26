@@ -9,6 +9,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
+use LaravelAudit\Audit\AuditEngine;
 use LaravelAudit\Audit\AuditOptions;
 use LaravelAudit\Audit\AuditProgressTracker;
 use LaravelAudit\Audit\AuditRunDispatcher;
@@ -22,6 +23,7 @@ final class AuditPanelController extends Controller
         private readonly AuditProgressTracker $runs,
         private readonly AuditRunExecutor $executor,
         private readonly AuditRunDispatcher $dispatcher,
+        private readonly AuditEngine $engine,
     ) {}
 
     public function dashboard(): View
@@ -100,6 +102,22 @@ final class AuditPanelController extends Controller
         ]);
     }
 
+    public function confirmPatterns(Request $request, string $uuid): RedirectResponse
+    {
+        $keys = array_values(array_filter(array_map(
+            strval(...),
+            $request->input('llm_hypotheses', []),
+        )));
+
+        abort_if($keys === [], 422);
+
+        $this->reports->confirmPatternHypotheses($uuid, $keys, $this->engine);
+
+        return redirect()
+            ->route('laravel-audit.reports.show', $uuid)
+            ->with('status', 'Selected pattern hypotheses were sent to the LLM.');
+    }
+
     public function runStatus(string $uuid): JsonResponse
     {
         $run = $this->runs->get($uuid);
@@ -165,7 +183,19 @@ final class AuditPanelController extends Controller
             noTools: $request->boolean('no_tools'),
             patterns: $request->boolean('patterns'),
             llm: $request->boolean('llm'),
+            llmHypothesisKeys: $this->llmHypothesisKeys($request),
         );
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function llmHypothesisKeys(Request $request): array
+    {
+        return array_values(array_filter(array_map(
+            strval(...),
+            $request->input('llm_hypotheses', []),
+        )));
     }
 
     /**

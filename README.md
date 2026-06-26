@@ -75,6 +75,7 @@ php artisan audit:analyze [options]
 | `--no-tools` | Skip Pint and PHPStan runners |
 | `--patterns` | Enable heuristic refactoring pattern scoring |
 | `--llm` | Confirm top heuristic hypotheses with an LLM using method source code |
+| `--llm-pick=` | Confirm only selected hypothesis keys (repeatable; format `pattern:file::method`) |
 | `--store` | Save the report for the web panel (when dashboard is enabled) |
 
 **Examples**
@@ -85,6 +86,7 @@ php artisan audit:analyze --format=sarif --fail-on=warning
 php artisan audit:analyze --only=security,performance
 php artisan audit:analyze --no-tools --patterns
 php artisan audit:analyze --patterns --llm --format=json
+php artisan audit:analyze --patterns --llm-pick=action:app/Http/Controllers/UserController.php::store --format=json
 php artisan audit:analyze --no-tools --store
 ```
 
@@ -113,6 +115,7 @@ php artisan audit:run-stored {uuid}
 | GET | `/audit/reports/create` | Start a new analysis |
 | POST | `/audit/reports` | Queue/create a run and redirect to progress |
 | GET | `/audit/reports/{uuid}` | View a saved report |
+| POST | `/audit/reports/{uuid}/confirm-patterns` | Confirm selected heuristic hypotheses with LLM (sync) |
 | GET | `/audit/runs/{uuid}` | Progress page with live status |
 | GET | `/audit/runs/{uuid}/status` | JSON progress payload (polling) |
 | POST | `/audit/runs/{uuid}/kick` | Re-dispatch background runner |
@@ -389,7 +392,7 @@ Output uses `source: heuristic`. Existing audit findings can boost pattern score
 
 ### 2. LLM confirmation (`--llm` or `patterns.llm.enabled`)
 
-Does **not** pick patterns from scratch. For each top heuristic hypothesis it sends:
+Does **not** pick patterns from scratch. For each heuristic hypothesis it sends:
 
 - pattern slug and title
 - structural facts (lines, branches, etc.)
@@ -397,10 +400,22 @@ Does **not** pick patterns from scratch. For each top heuristic hypothesis it se
 
 The model must **confirm or reject** the hypothesis with code evidence. Only confirmed items appear with `source: confirmed`.
 
+**Automatic (top N):** with `--llm` and no explicit keys, the advisor picks the strongest hypotheses per method, up to `patterns.llm.review_limit`.
+
+**Manual selection:**
+
+| Flow | How |
+|------|-----|
+| CLI | Repeat `--llm-pick=pattern:path/to/file.php::methodName` (hypothesis key shown on each heuristic row in JSON/console) |
+| Panel | Run with **patterns only** (leave LLM unchecked on create). On the report page, check hypotheses and click **Confirm selected with LLM** |
+
+Hypothesis key format: `{pattern}:{relative-file}::{method}` — e.g. `action:app/Http/Controllers/UserController.php::store`.
+
 ```bash
 php artisan audit:analyze --patterns          # heuristic only
 php artisan audit:analyze --llm               # LLM only (needs config/flag for heuristics to produce hypotheses)
-php artisan audit:analyze --patterns --llm    # both layers
+php artisan audit:analyze --patterns --llm    # both layers (auto top-N)
+php artisan audit:analyze --patterns --llm-pick=repository:app/Repositories/UserRepository.php::findForUpdate
 ```
 
 Compatible with OpenAI-compatible APIs (LM Studio, Ollama, etc.).

@@ -164,4 +164,57 @@ final class AuditPanelTest extends TestCase
             ->assertOk()
             ->assertJsonPath('status', 'completed');
     }
+
+    public function test_report_show_displays_llm_hypothesis_picker_for_heuristic_patterns(): void
+    {
+        $store = new FileAuditReportStore($this->reportsDirectory);
+        $snapshot = $store->store(new AuditReport(
+            issues: [],
+            toolResults: [],
+            durationSeconds: 0.5,
+        ), new AuditOptions(noTools: true, patterns: true));
+
+        file_put_contents(
+            $this->reportsDirectory.'/'.$snapshot->uuid.'.json',
+            json_encode([
+                ...$snapshot->toArray(),
+                'payload' => [
+                    'issues' => [],
+                    'patternSuggestions' => [[
+                        'hypothesisKey' => 'action:app/Http/Controllers/UserController.php::store',
+                        'pattern' => 'action',
+                        'title' => 'Action / Use Case',
+                        'description' => 'Move orchestration into an action.',
+                        'recommendation' => 'Extract action class.',
+                        'confidence' => 0.72,
+                        'location' => [
+                            'file' => 'app/Http/Controllers/UserController.php',
+                            'line' => 12,
+                            'class' => 'App\\Http\\Controllers\\UserController',
+                            'method' => 'store',
+                        ],
+                        'source' => 'heuristic',
+                    ]],
+                ],
+            ], JSON_THROW_ON_ERROR),
+        );
+
+        $this->get('/audit/reports/'.$snapshot->uuid)
+            ->assertOk()
+            ->assertSee('Confirm hypotheses with LLM')
+            ->assertSee('action:app/Http/Controllers/UserController.php::store');
+    }
+
+    public function test_confirm_patterns_requires_at_least_one_hypothesis(): void
+    {
+        $store = new FileAuditReportStore($this->reportsDirectory);
+        $snapshot = $store->store(new AuditReport(
+            issues: [],
+            toolResults: [],
+            durationSeconds: 0.5,
+        ), new AuditOptions(noTools: true));
+
+        $this->post('/audit/reports/'.$snapshot->uuid.'/confirm-patterns', [])
+            ->assertStatus(422);
+    }
 }
