@@ -232,6 +232,13 @@
             opacity: 0.65;
         }
 
+        form.is-pending label,
+        form.is-pending input:not([type="hidden"]),
+        form.is-pending select,
+        form.is-pending textarea {
+            pointer-events: none;
+        }
+
         .status {
             background: rgba(81, 207, 102, 0.12);
             border: 1px solid rgba(81, 207, 102, 0.35);
@@ -306,10 +313,6 @@
             button.classList.add('is-loading');
             button.dataset.originalText = button.textContent;
             button.textContent = form.dataset.loadingMessage || 'Please wait…';
-
-            form.querySelectorAll('input, select, textarea, button').forEach((element) => {
-                element.disabled = true;
-            });
 
             const progress = form.querySelector('[data-loading-progress]');
 
