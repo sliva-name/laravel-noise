@@ -1,0 +1,25 @@
+---
+description: Run quality checks and commit after completing code changes
+alwaysApply: true
+---
+
+# Finish every code task with checks and a commit
+
+After completing any task that changes code, always run these commands in order:
+
+```bash
+./vendor/bin/pint --dirty
+vendor/bin/phpstan analyse --memory-limit=1G
+./vendor/bin/phpunit
+```
+
+- Fix any failures before reporting the task as done.
+- If Pint changes files, re-run PHPStan and tests.
+
+Then commit all relevant changes before finishing the task.
+
+- Do not leave completed work uncommitted.
+- Use conventional commit prefixes (`feat:`, `fix:`, `style:`, `docs:`, `chore:`, etc.).
+- Write a concise message focused on the why, not a dump of file names.
+- Do not commit secrets (`.env`, credentials, etc.).
+- Do not push unless the user explicitly asks.
