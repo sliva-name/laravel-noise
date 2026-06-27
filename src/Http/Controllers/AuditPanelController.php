@@ -63,6 +63,11 @@ final class AuditPanelController extends Controller
             'report' => $record->payload,
             'menu' => $this->menu('reports'),
             ...$issuesView,
+            'issueQuery' => fn (array $overrides = []): string => $this->buildIssueListQuery($request, $overrides),
+            'issuePageNumbers' => $this->issuePageNumbers(
+                (int) $issuesView['issuesPage'],
+                (int) $issuesView['issuesLastPage'],
+            ),
         ]);
     }
 
@@ -229,6 +234,68 @@ final class AuditPanelController extends Controller
             'categoryCounts' => $this->categoryCounts($allIssues),
             'groupBySeverity' => $severityFilter === 'all',
         ];
+    }
+
+    /**
+     * @param  array{severity?: string, category?: string, page?: int}  $overrides
+     */
+    private function buildIssueListQuery(Request $request, array $overrides = []): string
+    {
+        $severity = array_key_exists('severity', $overrides)
+            ? (string) $overrides['severity']
+            : $this->severityFilter($request);
+
+        $category = array_key_exists('category', $overrides)
+            ? (string) $overrides['category']
+            : $this->categoryFilter($request);
+
+        if (array_key_exists('page', $overrides)) {
+            $page = max(1, (int) $overrides['page']);
+        } elseif (array_key_exists('severity', $overrides) || array_key_exists('category', $overrides)) {
+            $page = 1;
+        } else {
+            $page = max(1, (int) $request->query('page', '1'));
+        }
+
+        return http_build_query(array_filter([
+            'severity' => $severity !== 'all' ? $severity : null,
+            'category' => $category !== 'all' ? $category : null,
+            'page' => $page > 1 ? $page : null,
+        ], static fn ($value) => $value !== null && $value !== ''));
+    }
+
+    /**
+     * @return list<int|string>
+     */
+    private function issuePageNumbers(int $current, int $last): array
+    {
+        if ($last <= 1) {
+            return [];
+        }
+
+        if ($last <= 7) {
+            return range(1, $last);
+        }
+
+        $pages = [1];
+        $rangeStart = max(2, $current - 1);
+        $rangeEnd = min($last - 1, $current + 1);
+
+        if ($rangeStart > 2) {
+            $pages[] = '...';
+        }
+
+        for ($page = $rangeStart; $page <= $rangeEnd; $page++) {
+            $pages[] = $page;
+        }
+
+        if ($rangeEnd < $last - 1) {
+            $pages[] = '...';
+        }
+
+        $pages[] = $last;
+
+        return $pages;
     }
 
     private function severityFilter(Request $request): string

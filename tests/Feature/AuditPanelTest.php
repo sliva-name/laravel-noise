@@ -182,7 +182,18 @@ final class AuditPanelTest extends TestCase
             ->assertOk()
             ->assertSee('Showing 1–5 of 5')
             ->assertSee('Issue 1')
-            ->assertDontSee('Issue 6');
+            ->assertDontSee('Issue 6')
+            ->assertSee('href="'.route('laravel-audit.reports.show', $snapshot->uuid).'"', false);
+
+        $this->get('/audit/reports/'.$snapshot->uuid)
+            ->assertOk()
+            ->assertSee('Showing 1–25 of 30');
+
+        $this->get('/audit/reports/'.$snapshot->uuid.'?page=2')
+            ->assertOk()
+            ->assertSee('First')
+            ->assertSee('Last')
+            ->assertSee('pagination-page is-active">2</', false);
 
         $this->get('/audit/reports/'.$snapshot->uuid.'?category=security')
             ->assertOk()

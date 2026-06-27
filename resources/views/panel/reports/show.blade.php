@@ -39,11 +39,7 @@
             'warning' => 'Warning',
             'info' => 'Info',
         ];
-        $issueQuery = fn (array $overrides = []): string => http_build_query(array_filter([
-            'severity' => ($overrides['severity'] ?? $severityFilter) !== 'all' ? ($overrides['severity'] ?? $severityFilter) : null,
-            'category' => ($overrides['category'] ?? $categoryFilter) !== 'all' ? ($overrides['category'] ?? $categoryFilter) : null,
-            'page' => $overrides['page'] ?? null,
-        ], fn ($value) => $value !== null && $value !== ''));
+        $reportShowUrl = route('laravel-audit.reports.show', $record->uuid);
     @endphp
 
     <div class="card">
@@ -59,7 +55,7 @@
                 </p>
             </div>
 
-            <form class="issues-filter-form" method="get" action="{{ route('laravel-audit.reports.show', $record->uuid) }}">
+            <form class="issues-filter-form" method="get" action="{{ $reportShowUrl }}">
                 @if ($severityFilter !== 'all')
                     <input type="hidden" name="severity" value="{{ $severityFilter }}">
                 @endif
@@ -84,10 +80,13 @@
                 @php
                     $count = $severityCounts[$value] ?? 0;
                     $isActive = $severityFilter === $value;
-                    $tabQuery = $issueQuery(['severity' => $value === 'all' ? null : $value, 'page' => null]);
+                    $tabQuery = $issueQuery([
+                        'severity' => $value,
+                        'page' => 1,
+                    ]);
                 @endphp
                 <a
-                    href="{{ route('laravel-audit.reports.show', $record->uuid).($tabQuery !== '' ? '?'.$tabQuery : '') }}"
+                    href="{{ $reportShowUrl.($tabQuery !== '' ? '?'.$tabQuery : '') }}"
                     @class(['filter-tab', 'active' => $isActive, 'disabled' => $count === 0 && $value !== 'all'])
                     @if ($count === 0 && $value !== 'all') aria-disabled="true" @endif
                 >
@@ -129,19 +128,37 @@
 
         @if ($issuesLastPage > 1)
             <nav class="pagination" aria-label="Issues pagination">
-                @if ($issuesPage > 1)
-                    <a class="pagination-link" href="{{ route('laravel-audit.reports.show', $record->uuid).'?'.$issueQuery(['page' => $issuesPage - 1]) }}">Previous</a>
-                @else
-                    <span class="pagination-link disabled">Previous</span>
-                @endif
+                <div class="pagination-nav">
+                    @if ($issuesPage > 1)
+                        <a class="pagination-link" href="{{ $reportShowUrl.'?'.$issueQuery(['page' => 1]) }}">First</a>
+                        <a class="pagination-link" href="{{ $reportShowUrl.'?'.$issueQuery(['page' => $issuesPage - 1]) }}">Previous</a>
+                    @else
+                        <span class="pagination-link disabled">First</span>
+                        <span class="pagination-link disabled">Previous</span>
+                    @endif
+                </div>
 
-                <span class="pagination-status">Page {{ $issuesPage }} of {{ $issuesLastPage }}</span>
+                <div class="pagination-pages">
+                    @foreach ($issuePageNumbers as $pageNumber)
+                        @if ($pageNumber === '...')
+                            <span class="pagination-ellipsis">…</span>
+                        @elseif ($pageNumber === $issuesPage)
+                            <span class="pagination-page is-active">{{ $pageNumber }}</span>
+                        @else
+                            <a class="pagination-page" href="{{ $reportShowUrl.'?'.$issueQuery(['page' => $pageNumber]) }}">{{ $pageNumber }}</a>
+                        @endif
+                    @endforeach
+                </div>
 
-                @if ($issuesPage < $issuesLastPage)
-                    <a class="pagination-link" href="{{ route('laravel-audit.reports.show', $record->uuid).'?'.$issueQuery(['page' => $issuesPage + 1]) }}">Next</a>
-                @else
-                    <span class="pagination-link disabled">Next</span>
-                @endif
+                <div class="pagination-nav">
+                    @if ($issuesPage < $issuesLastPage)
+                        <a class="pagination-link" href="{{ $reportShowUrl.'?'.$issueQuery(['page' => $issuesPage + 1]) }}">Next</a>
+                        <a class="pagination-link" href="{{ $reportShowUrl.'?'.$issueQuery(['page' => $issuesLastPage]) }}">Last</a>
+                    @else
+                        <span class="pagination-link disabled">Next</span>
+                        <span class="pagination-link disabled">Last</span>
+                    @endif
+                </div>
             </nav>
         @endif
     </div>
