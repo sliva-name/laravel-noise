@@ -31,6 +31,19 @@ final class AuditRunJobTimeoutTest extends TestCase
         $this->assertSame(180 + (120 * 20), $timeout);
     }
 
+    public function test_llm_job_timeout_accounts_for_parallel_requests(): void
+    {
+        $this->app['config']->set('laravel-audit.dashboard.job_timeout', 180);
+        $this->app['config']->set('laravel-audit.patterns.llm.timeout', 120);
+        $this->app['config']->set('laravel-audit.patterns.llm.review_limit', 3);
+        $this->app['config']->set('laravel-audit.patterns.llm.concurrency', 4);
+        $this->app['config']->set('laravel-audit.patterns.limit', 20);
+
+        $timeout = AuditRunJobTimeout::forOptions(new AuditOptions(llm: true));
+
+        $this->assertSame(180 + (120 * 5), $timeout);
+    }
+
     public function test_llm_job_timeout_can_be_overridden(): void
     {
         $this->app['config']->set('laravel-audit.dashboard.llm_job_timeout', 3600);

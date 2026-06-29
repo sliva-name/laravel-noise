@@ -72,6 +72,7 @@ return [
             'max_attempts' => (int) env('LARAVEL_AUDIT_PATTERN_LLM_MAX_ATTEMPTS', 0),
             'refine_top' => (int) env('LARAVEL_AUDIT_PATTERN_LLM_REFINE_TOP', 3),
             'review_limit' => (int) env('LARAVEL_AUDIT_PATTERN_LLM_REVIEW_LIMIT', 3),
+            'concurrency' => (int) env('LARAVEL_AUDIT_PATTERN_LLM_CONCURRENCY', 1),
         ],
     ],
 

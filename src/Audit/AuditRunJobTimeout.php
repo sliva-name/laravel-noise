@@ -30,8 +30,10 @@ final class AuditRunJobTimeout
         }
 
         $maxAttempts = self::maxLlmAttempts($config);
+        $concurrency = max(1, (int) data_get($config, 'patterns.llm.concurrency', 1));
+        $batches = (int) ceil($maxAttempts / $concurrency);
 
-        return max(60, $base + ($llmTimeout * $maxAttempts));
+        return max(60, $base + ($llmTimeout * $batches));
     }
 
     /**

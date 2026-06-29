@@ -111,6 +111,7 @@ final class AuditServiceProvider extends ServiceProvider
                 timeout: (int) data_get($config, 'timeout', 120),
                 reviewLimit: (int) data_get($config, 'review_limit', data_get($config, 'refine_top', 3)),
                 maxAttempts: AuditRunJobTimeout::maxLlmAttempts($auditConfig),
+                concurrency: max(1, (int) data_get($config, 'concurrency', 1)),
             );
         });
 

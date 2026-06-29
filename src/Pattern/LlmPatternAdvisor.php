@@ -21,6 +21,7 @@ final class LlmPatternAdvisor implements PatternAdvisorInterface
         private readonly int $timeout = 120,
         private readonly int $reviewLimit = 3,
         private readonly int $maxAttempts = 10,
+        private readonly int $concurrency = 1,
     ) {}
 
     /**
@@ -32,18 +33,45 @@ final class LlmPatternAdvisor implements PatternAdvisorInterface
     {
         $heuristic = $this->heuristicAdvisor->suggest($project, $issues);
         $suggestions = [];
-        $attempts = 0;
         $selectedKeys = $llmHypothesisKeys !== [];
         $queue = $selectedKeys
             ? $this->selectedHypotheses($heuristic, $llmHypothesisKeys)
             : $this->topHypothesesByMethod($heuristic);
 
-        foreach ($queue as $hypothesis) {
-            if ($attempts >= $this->maxAttempts) {
+        $jobs = $this->prepareJobs($project, $queue);
+
+        foreach (array_chunk($jobs, max(1, $this->concurrency)) as $batch) {
+            if (! $selectedKeys && count($suggestions) >= $this->reviewLimit) {
                 break;
             }
 
-            if (! $selectedKeys && count($suggestions) >= $this->reviewLimit) {
+            foreach ($this->confirmBatch($batch) as $result) {
+                if ($result === null) {
+                    continue;
+                }
+
+                $suggestions[] = $this->reviewedSuggestion($result['hypothesis'], $result['llm']);
+
+                if (! $selectedKeys && count($suggestions) >= $this->reviewLimit) {
+                    break;
+                }
+            }
+        }
+
+        return $suggestions;
+    }
+
+    /**
+     * @param  list<PatternSuggestion>  $queue
+     * @return list<array{hypothesis: PatternSuggestion, snippet: string}>
+     */
+    private function prepareJobs(ProjectIndex $project, array $queue): array
+    {
+        $jobs = [];
+        $attempts = 0;
+
+        foreach ($queue as $hypothesis) {
+            if ($attempts >= $this->maxAttempts) {
                 break;
             }
 
@@ -60,16 +88,46 @@ final class LlmPatternAdvisor implements PatternAdvisorInterface
             }
 
             $attempts++;
-            $llmResult = $this->confirm($hypothesis, $snippet);
-
-            if ($llmResult === null) {
-                continue;
-            }
-
-            $suggestions[] = $this->reviewedSuggestion($hypothesis, $llmResult);
+            $jobs[] = [
+                'hypothesis' => $hypothesis,
+                'snippet' => $snippet,
+            ];
         }
 
-        return $suggestions;
+        return $jobs;
+    }
+
+    /**
+     * @param  list<array{hypothesis: PatternSuggestion, snippet: string}>  $batch
+     * @return list<array{hypothesis: PatternSuggestion, llm: array<string, mixed>}|null>
+     */
+    private function confirmBatch(array $batch): array
+    {
+        if ($batch === []) {
+            return [];
+        }
+
+        $payloads = array_map(
+            fn (array $job): array => $this->buildPayload($job['hypothesis'], $job['snippet']),
+            $batch,
+        );
+
+        $responses = $this->httpClient->postMany($this->endpoint, $payloads, $this->apiKey, $this->timeout);
+        $results = [];
+
+        foreach ($batch as $index => $job) {
+            $response = $responses[$index] ?? null;
+            $decoded = $response === null ? null : $this->parseResponse($response);
+
+            $results[] = $decoded === null
+                ? null
+                : [
+                    'hypothesis' => $job['hypothesis'],
+                    'llm' => $decoded,
+                ];
+        }
+
+        return $results;
     }
 
     /**
@@ -185,9 +243,9 @@ final class LlmPatternAdvisor implements PatternAdvisorInterface
     }
 
     /**
-     * @return array<string, mixed>|null
+     * @return array<string, mixed>
      */
-    private function confirm(PatternSuggestion $hypothesis, string $snippet): ?array
+    private function buildPayload(PatternSuggestion $hypothesis, string $snippet): array
     {
         $signals = $this->structuralSignals($hypothesis->features);
 
@@ -227,7 +285,7 @@ File: {$hypothesis->file}
 ```
 PROMPT;
 
-        $payload = $this->provider === 'ollama'
+        return $this->provider === 'ollama'
             ? [
                 'model' => $this->model,
                 'stream' => false,
@@ -244,13 +302,14 @@ PROMPT;
                     ['role' => 'user', 'content' => "/no_think\n{$prompt}"],
                 ],
             ];
+    }
 
-        $response = $this->httpClient->post($this->endpoint, $payload, $this->apiKey, $this->timeout);
-
-        if ($response === null) {
-            return null;
-        }
-
+    /**
+     * @param  array<string, mixed>  $response
+     * @return array<string, mixed>|null
+     */
+    private function parseResponse(array $response): ?array
+    {
         $message = $this->provider === 'ollama'
             ? $response
             : data_get($response, 'choices.0.message');

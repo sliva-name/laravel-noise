@@ -263,6 +263,7 @@ Default storage paths:
 | `patterns.llm.timeout` | `LARAVEL_AUDIT_PATTERN_LLM_TIMEOUT` | `120` | HTTP timeout (seconds) |
 | `patterns.llm.max_attempts` | `LARAVEL_AUDIT_PATTERN_LLM_MAX_ATTEMPTS` | auto | Max LLM HTTP calls per audit |
 | `patterns.llm.review_limit` | `LARAVEL_AUDIT_PATTERN_LLM_REVIEW_LIMIT` | `3` | Max methods sent to LLM |
+| `patterns.llm.concurrency` | `LARAVEL_AUDIT_PATTERN_LLM_CONCURRENCY` | `1` | Parallel LLM HTTP requests per batch |
 | `patterns.llm.refine_top` | `LARAVEL_AUDIT_PATTERN_LLM_REFINE_TOP` | `3` | Legacy alias for review limit |
 
 ### Rules
