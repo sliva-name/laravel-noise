@@ -10,6 +10,7 @@ use LaravelAudit\Analysis\Category;
 use LaravelAudit\Analysis\Issue;
 use LaravelAudit\Analysis\Severity;
 use LaravelAudit\Analyzers\BaseAnalyzer;
+use LaravelAudit\Project\PhpFile;
 
 final class RawSqlAnalyzer extends BaseAnalyzer implements AnalyzerInterface
 {
@@ -32,6 +33,10 @@ final class RawSqlAnalyzer extends BaseAnalyzer implements AnalyzerInterface
         $pattern = '/(DB::raw|->(?:selectRaw|whereRaw|orWhereRaw|havingRaw|orderByRaw|groupByRaw)|DB::(?:statement|unprepared))/';
 
         foreach ($context->project->phpFiles as $file) {
+            if ($this->isMigrationFile($file)) {
+                continue;
+            }
+
             foreach ($this->matchingLines($file, $pattern) as $match) {
                 $issues[] = $this->issue(
                     $this->id(),
@@ -47,5 +52,10 @@ final class RawSqlAnalyzer extends BaseAnalyzer implements AnalyzerInterface
         }
 
         return $issues;
+    }
+
+    private function isMigrationFile(PhpFile $file): bool
+    {
+        return str_starts_with($file->relativePath, 'database/migrations/');
     }
 }

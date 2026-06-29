@@ -324,13 +324,13 @@ LARAVEL_AUDIT_DASHBOARD_STORAGE=file
 | Rule ID | Detects |
 |---------|---------|
 | `security.raw-sql` | Raw SQL / `DB::raw` usage |
-| `security.mass-assignment` | Unprotected mass assignment |
+| `security.mass-assignment` | Missing `$fillable`/`$guarded`, empty `$guarded`, or `$guarded`-only models |
 | `security.weak-validation` | Weak inline validation |
 | `security.debug-configuration` | Debug-friendly defaults in config |
 | `security.command-injection` | Shell/command injection risks |
 | `security.eval-usage` | `eval()` usage |
 | `security.hardcoded-credentials` | Hardcoded secrets |
-| `security.unguarded-model` | `$guarded = []` models |
+| `security.unguarded-model` | `Model::unguard()` usage |
 
 ### Performance
 

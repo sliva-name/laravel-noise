@@ -270,11 +270,7 @@ final class PhpStanRunner extends AbstractProcessRunner
             }
         }
 
-        if ($issues !== [] || $output === '') {
-            return $issues;
-        }
-
-        return $this->issuesFromPlainOutput($output);
+        return $issues;
     }
 
     /**

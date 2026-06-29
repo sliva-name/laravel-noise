@@ -176,6 +176,31 @@ final class PhpStanRunnerTest extends TestCase
         self::assertSame('example.issue', $result->issues[0]->ruleId);
     }
 
+    public function test_returns_no_issues_when_phpstan_reports_zero_errors(): void
+    {
+        $basePath = $this->makeProject(<<<'PHP'
+            #!/usr/bin/env php
+            <?php
+
+            echo json_encode([
+                'totals' => ['errors' => 0, 'file_errors' => 0],
+                'files' => [],
+            ]);
+            PHP);
+
+        mkdir($basePath.'/app', 0777, true);
+
+        $result = (new PhpStanRunner)->run($basePath, [
+            'binary' => 'vendor/bin/phpstan',
+            'arguments' => ['analyse', '--error-format=json'],
+            'paths' => ['app'],
+            'auto_larastan' => false,
+        ]);
+
+        self::assertSame(0, $result->exitCode);
+        self::assertSame([], $result->issues);
+    }
+
     public function test_parses_plain_text_result_cache_errors(): void
     {
         $basePath = $this->makeProject(<<<'PHP'
