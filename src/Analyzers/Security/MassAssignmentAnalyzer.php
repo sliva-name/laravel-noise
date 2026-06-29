@@ -39,7 +39,7 @@ final class MassAssignmentAnalyzer extends BaseAnalyzer implements AnalyzerInter
         foreach ($context->project->models() as $file) {
             $properties = $this->propertyReader->read($file);
 
-            if (! $properties['hasFillable'] && ! $properties['hasGuarded']) {
+            if (! $properties['hasFillable'] && ! $properties['hasGuarded'] && ! $properties['hasUnguarded']) {
                 $issues[] = $this->issue(
                     $this->id(),
                     $this->category(),
@@ -68,21 +68,21 @@ final class MassAssignmentAnalyzer extends BaseAnalyzer implements AnalyzerInter
             }
 
             if ($properties['hasGuarded'] && ! $properties['hasFillable'] && ! $properties['hasEmptyGuarded']) {
-                $issues[] = $this->guardedWithoutFillableIssue($file);
+                $issues[] = $this->guardedWithoutFillableIssue($file, $properties['guardedLine']);
             }
         }
 
         return $issues;
     }
 
-    private function guardedWithoutFillableIssue(PhpFile $file): Issue
+    private function guardedWithoutFillableIssue(PhpFile $file, ?int $line = null): Issue
     {
-        $line = 1;
+        if ($line === null) {
+            foreach ($this->matchingLines($file, '/protected\s+\$guarded\s*=/') as $match) {
+                $line = $match['line'];
 
-        foreach ($this->matchingLines($file, '/protected\s+\$guarded\s*=/') as $match) {
-            $line = $match['line'];
-
-            break;
+                break;
+            }
         }
 
         return $this->issue(
@@ -92,7 +92,7 @@ final class MassAssignmentAnalyzer extends BaseAnalyzer implements AnalyzerInter
             'Model defines $guarded without $fillable',
             'Using only $guarded makes allowed request-driven attributes harder to spot than an explicit $fillable list.',
             $file,
-            $line,
+            $line ?? 1,
             'Prefer an explicit $fillable list for attributes that may be mass-assigned from HTTP input.',
         );
     }

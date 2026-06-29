@@ -85,6 +85,7 @@ return [
         'security.hardcoded-credentials' => true,
         'security.unguarded-model' => true,
         'security.unvalidated-mass-create' => true,
+        'security.sensitive-field-exposure' => true,
         'performance.n-plus-one-candidate' => true,
         'performance.sync-heavy-job' => true,
         'reliability.missing-transaction' => true,

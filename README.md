@@ -332,6 +332,7 @@ LARAVEL_AUDIT_DASHBOARD_STORAGE=file
 | `security.hardcoded-credentials` | Hardcoded secrets |
 | `security.unguarded-model` | `Model::unguard()` usage |
 | `security.unvalidated-mass-create` | `Model::create($request->all())` without validation |
+| `security.sensitive-field-exposure` | Raw model/Inertia/JSON responses exposing unhidden sensitive columns |
 
 ### Performance
 

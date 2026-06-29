@@ -10,6 +10,8 @@ use LaravelAudit\Analysis\Category;
 use LaravelAudit\Analysis\Issue;
 use LaravelAudit\Analysis\Severity;
 use LaravelAudit\Analyzers\BaseAnalyzer;
+use PhpParser\Node;
+use PhpParser\NodeFinder;
 
 final class EnvAccessOutsideConfigAnalyzer extends BaseAnalyzer implements AnalyzerInterface
 {
@@ -29,13 +31,21 @@ final class EnvAccessOutsideConfigAnalyzer extends BaseAnalyzer implements Analy
     public function analyze(AnalysisContext $context): array
     {
         $issues = [];
+        $finder = new NodeFinder;
 
         foreach ($context->project->phpFiles as $file) {
             if ($file->inDirectory('config') || $file->inDirectory('tests')) {
                 continue;
             }
 
-            foreach ($this->matchingLines($file, '/\benv\s*\(/') as $match) {
+            /** @var list<Node\Expr\FuncCall> $calls */
+            $calls = $finder->findInstanceOf($file->ast, Node\Expr\FuncCall::class);
+
+            foreach ($calls as $call) {
+                if (! $call->name instanceof Node\Name || strtolower($call->name->toString()) !== 'env') {
+                    continue;
+                }
+
                 $issues[] = $this->issue(
                     $this->id(),
                     $this->category(),
@@ -43,7 +53,7 @@ final class EnvAccessOutsideConfigAnalyzer extends BaseAnalyzer implements Analy
                     'env() used outside config',
                     'Laravel configuration caching can make env() unavailable outside config files.',
                     $file,
-                    $match['line'],
+                    $call->getStartLine(),
                     'Move environment reads into config files and use config() throughout application code.',
                 );
             }

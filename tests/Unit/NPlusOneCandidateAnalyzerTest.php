@@ -62,6 +62,50 @@ final class NPlusOneCandidateAnalyzerTest extends TestCase
         self::assertSame('performance.n-plus-one-candidate', $issues[0]->ruleId);
     }
 
+    public function test_does_not_flag_aggregate_row_property_access_in_loop(): void
+    {
+        $issues = (new NPlusOneCandidateAnalyzer)->analyze($this->context(<<<'PHP'
+            <?php
+
+            final class ReportExporter
+            {
+                public function export(array $rows): void
+                {
+                    foreach ($rows as $row) {
+                        echo $row->nombre_producto;
+                    }
+                }
+            }
+            PHP));
+
+        self::assertSame([], $issues);
+    }
+
+    public function test_does_not_flag_property_access_on_query_result_inside_loop(): void
+    {
+        $issues = (new NPlusOneCandidateAnalyzer)->analyze($this->context(<<<'PHP'
+            <?php
+
+            use App\Models\ProductoTalla;
+
+            final class CheckoutController
+            {
+                public function handle(array $items): void
+                {
+                    foreach ($items as $item) {
+                        $talla = ProductoTalla::where('producto_id', $item['producto_id'])->first();
+
+                        if ($talla) {
+                            $talla->decrement('stock', min($item['cantidad'], $talla->stock));
+                        }
+                    }
+                }
+            }
+            PHP));
+
+        self::assertSame([], $issues);
+    }
+
     private function context(string $contents): AnalysisContext
     {
         return new AnalysisContext(

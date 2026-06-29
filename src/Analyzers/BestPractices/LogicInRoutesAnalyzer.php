@@ -50,6 +50,10 @@ final class LogicInRoutesAnalyzer extends BaseAnalyzer implements AnalyzerInterf
                     continue;
                 }
 
+                if ($this->isRouteRegistrationClosure($closure)) {
+                    continue;
+                }
+
                 $issues[] = $this->issue(
                     $this->id(),
                     $this->category(),
@@ -64,5 +68,68 @@ final class LogicInRoutesAnalyzer extends BaseAnalyzer implements AnalyzerInterf
         }
 
         return $issues;
+    }
+
+    private function isRouteRegistrationClosure(Node\Expr\Closure $closure): bool
+    {
+        $statements = $closure->stmts ?? [];
+
+        if ($statements === []) {
+            return true;
+        }
+
+        foreach ($statements as $statement) {
+            if (! $this->isRouteRegistrationStatement($statement)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private function isRouteRegistrationStatement(Node\Stmt $statement): bool
+    {
+        if (! $statement instanceof Node\Stmt\Expression) {
+            return false;
+        }
+
+        return $this->isRouteRegistrationExpression($statement->expr);
+    }
+
+    private function isRouteRegistrationExpression(Node\Expr $expression): bool
+    {
+        if ($expression instanceof Node\Expr\StaticCall) {
+            return $this->isRouteClass($expression->class);
+        }
+
+        if ($expression instanceof Node\Expr\MethodCall) {
+            return $this->expressionOriginatesFromRoute($expression);
+        }
+
+        return false;
+    }
+
+    private function expressionOriginatesFromRoute(Node\Expr\MethodCall $call): bool
+    {
+        $current = $call->var;
+
+        while ($current instanceof Node\Expr\MethodCall) {
+            if ($this->isRouteRegistrationExpression($current)) {
+                return true;
+            }
+
+            $current = $current->var;
+        }
+
+        return $this->isRouteRegistrationExpression($current);
+    }
+
+    private function isRouteClass(?Node\Name $class): bool
+    {
+        if (! $class instanceof Node\Name) {
+            return false;
+        }
+
+        return strcasecmp($class->getLast(), 'Route') === 0;
     }
 }

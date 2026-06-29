@@ -121,6 +121,25 @@ final class ShieldCiStyleAnalyzersTest extends TestCase
         self::assertRuleFound('security.unguarded-model', $issues);
     }
 
+    public function test_detects_unguarded_model_attribute(): void
+    {
+        $issues = (new UnguardedModelAnalyzer)->analyze($this->context(<<<'PHP'
+            <?php
+
+            namespace App\Models;
+
+            use Illuminate\Database\Eloquent\Attributes\Unguarded;
+            use Illuminate\Database\Eloquent\Model;
+
+            #[Unguarded]
+            final class User extends Model
+            {
+            }
+            PHP, 'app/Models/User.php'));
+
+        self::assertRuleFound('security.unguarded-model', $issues);
+    }
+
     public function test_detects_superglobal_access(): void
     {
         $issues = (new GlobalVariablesAnalyzer)->analyze($this->context(<<<'PHP'

@@ -47,6 +47,24 @@ final class ReliabilityAnalyzersTest extends TestCase
         self::assertIssueRule('reliability.env-access-outside-config', $issues);
     }
 
+    public function test_env_access_analyzer_ignores_env_mentions_in_comments(): void
+    {
+        $issues = (new EnvAccessOutsideConfigAnalyzer)->analyze($this->analysisContext(<<<'PHP'
+            <?php
+
+            final class Example
+            {
+                public function handle(): string
+                {
+                    // Switched from env() to config()
+                    return config('services.example.key');
+                }
+            }
+            PHP, 'app/Services/Example.php'));
+
+        self::assertNoIssues($issues);
+    }
+
     public function test_missing_transaction_analyzer_flags_method_with_multiple_writes(): void
     {
         $issues = (new MissingTransactionAnalyzer)->analyze($this->analysisContext(<<<'PHP'
@@ -93,6 +111,32 @@ final class ReliabilityAnalyzersTest extends TestCase
                 }
             }
             PHP, 'app/Http/Controllers/OrderController.php'));
+
+        self::assertNoIssues($issues);
+    }
+
+    public function test_missing_transaction_analyzer_ignores_storage_delete_with_model_delete(): void
+    {
+        $issues = (new MissingTransactionAnalyzer)->analyze($this->analysisContext(<<<'PHP'
+            <?php
+
+            namespace App\Http\Controllers;
+
+            use App\Models\Producto;
+            use Illuminate\Support\Facades\Storage;
+
+            final class ProductoController
+            {
+                public function destroy(Producto $producto): void
+                {
+                    if ($producto->imagen) {
+                        Storage::disk('public')->delete($producto->imagen);
+                    }
+
+                    $producto->delete();
+                }
+            }
+            PHP, 'app/Http/Controllers/ProductoController.php'));
 
         self::assertNoIssues($issues);
     }

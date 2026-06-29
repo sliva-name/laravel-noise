@@ -123,6 +123,35 @@ final class ShieldCiStyleAnalyzersNegativeTest extends TestCase
         self::assertNoIssues($issues);
     }
 
+    public function test_does_not_flag_large_route_group_closures(): void
+    {
+        $issues = (new LogicInRoutesAnalyzer)->analyze($this->analysisContext(<<<'PHP'
+            <?php
+
+            use Illuminate\Support\Facades\Route;
+
+            Route::middleware('auth')->group(function () {
+                Route::get('/one', fn () => 'one');
+                Route::get('/two', fn () => 'two');
+                Route::get('/three', fn () => 'three');
+                Route::get('/four', fn () => 'four');
+                Route::get('/five', fn () => 'five');
+                Route::get('/six', fn () => 'six');
+                Route::get('/seven', fn () => 'seven');
+                Route::get('/eight', fn () => 'eight');
+                Route::get('/nine', fn () => 'nine');
+                Route::get('/ten', fn () => 'ten');
+                Route::get('/eleven', fn () => 'eleven');
+                Route::get('/twelve', fn () => 'twelve');
+                Route::get('/thirteen', fn () => 'thirteen');
+                Route::get('/fourteen', fn () => 'fourteen');
+                Route::get('/fifteen', fn () => 'fifteen');
+            });
+            PHP, 'routes/web.php'));
+
+        self::assertNoIssues($issues);
+    }
+
     public function test_does_not_flag_models_without_unguard(): void
     {
         $issues = (new UnguardedModelAnalyzer)->analyze($this->analysisContext(<<<'PHP'

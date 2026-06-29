@@ -34,6 +34,7 @@ use LaravelAudit\Analyzers\Security\EvalUsageAnalyzer;
 use LaravelAudit\Analyzers\Security\HardcodedCredentialsAnalyzer;
 use LaravelAudit\Analyzers\Security\MassAssignmentAnalyzer;
 use LaravelAudit\Analyzers\Security\RawSqlAnalyzer;
+use LaravelAudit\Analyzers\Security\SensitiveFieldExposureAnalyzer;
 use LaravelAudit\Analyzers\Security\UnguardedModelAnalyzer;
 use LaravelAudit\Analyzers\Security\UnvalidatedMassCreateAnalyzer;
 use LaravelAudit\Analyzers\Security\WeakValidationAnalyzer;
@@ -153,6 +154,7 @@ final class AuditServiceProvider extends ServiceProvider
                 new HardcodedCredentialsAnalyzer,
                 new UnguardedModelAnalyzer,
                 new UnvalidatedMassCreateAnalyzer,
+                new SensitiveFieldExposureAnalyzer,
                 new NPlusOneCandidateAnalyzer,
                 new SyncHeavyJobAnalyzer,
                 new MissingTransactionAnalyzer,

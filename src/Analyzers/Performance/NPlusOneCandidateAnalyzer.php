@@ -34,7 +34,7 @@ final class NPlusOneCandidateAnalyzer extends BaseAnalyzer implements AnalyzerIn
             $lines = preg_split('/\R/', $file->contents) ?: [];
 
             foreach ($lines as $index => $line) {
-                if (preg_match('/foreach\s*\([^)]+\s+as\s+\$\w+/', $line) !== 1) {
+                if (preg_match('/foreach\s*\([^)]+\s+as\s+\$(\w+)/', $line, $matches) !== 1) {
                     continue;
                 }
 
@@ -42,9 +42,10 @@ final class NPlusOneCandidateAnalyzer extends BaseAnalyzer implements AnalyzerIn
                     continue;
                 }
 
+                $loopVariable = $matches[1];
                 $window = implode("\n", array_slice($lines, $index, 20));
 
-                if ($this->hasRelationshipPropertyAccess($window) && preg_match('/with\(|load\(/', $window) !== 1) {
+                if ($this->hasRelationshipPropertyAccess($window, $loopVariable) && preg_match('/with\(|load\(/', $window) !== 1) {
                     $issues[] = $this->issue(
                         $this->id(),
                         $this->category(),
@@ -72,8 +73,22 @@ final class NPlusOneCandidateAnalyzer extends BaseAnalyzer implements AnalyzerIn
         return preg_match('/\b(?:Builder|Eloquent\\Builder|Query\\Builder)::macro\s*\(/', $context) === 1;
     }
 
-    private function hasRelationshipPropertyAccess(string $window): bool
+    private function hasRelationshipPropertyAccess(string $window, string $loopVariable): bool
     {
-        return preg_match('/\$\w+->\w++(?!\s*\()/', $window) === 1;
+        if (preg_match('/\$\w+->\w+->\w++(?!\s*\()/', $window) === 1) {
+            return true;
+        }
+
+        if (preg_match_all('/\$'.preg_quote($loopVariable, '/').'->(\w++)(?!\s*\()/', $window, $matches) !== 1) {
+            return false;
+        }
+
+        foreach ($matches[1] as $property) {
+            if (! str_contains($property, '_')) {
+                return true;
+            }
+        }
+
+        return false;
     }
 }

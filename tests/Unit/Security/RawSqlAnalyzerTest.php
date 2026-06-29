@@ -31,6 +31,47 @@ final class RawSqlAnalyzerTest extends TestCase
         self::assertIssueRule('security.raw-sql', $issues);
     }
 
+    public function test_reports_warning_for_static_raw_sql(): void
+    {
+        $issues = (new RawSqlAnalyzer)->analyze($this->analysisContext(<<<'PHP'
+            <?php
+
+            use Illuminate\Support\Facades\DB;
+
+            final class ReportRepository
+            {
+                public function totals(): void
+                {
+                    DB::table('orders')->select(DB::raw('SUM(total) as total'));
+                }
+            }
+            PHP, 'app/Repositories/ReportRepository.php'));
+
+        self::assertCount(1, $issues);
+        self::assertSame('security.raw-sql', $issues[0]->ruleId);
+        self::assertSame('warning', $issues[0]->severity->value);
+    }
+
+    public function test_reports_critical_for_dynamic_raw_sql(): void
+    {
+        $issues = (new RawSqlAnalyzer)->analyze($this->analysisContext(<<<'PHP'
+            <?php
+
+            use Illuminate\Support\Facades\DB;
+
+            final class ReportRepository
+            {
+                public function totals(string $column): void
+                {
+                    DB::table('orders')->whereRaw('status = '.$column);
+                }
+            }
+            PHP, 'app/Repositories/ReportRepository.php'));
+
+        self::assertCount(1, $issues);
+        self::assertSame('critical', $issues[0]->severity->value);
+    }
+
     public function test_ignores_raw_sql_inside_migrations(): void
     {
         $issues = (new RawSqlAnalyzer)->analyze($this->analysisContext(<<<'PHP'

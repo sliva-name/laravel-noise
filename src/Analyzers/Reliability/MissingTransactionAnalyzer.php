@@ -100,9 +100,19 @@ final class MissingTransactionAnalyzer extends BaseAnalyzer implements AnalyzerI
         $count = 0;
 
         foreach ($finder->findInstanceOf($statements, Node\Expr\MethodCall::class) as $call) {
-            if ($call->name instanceof Node\Identifier && in_array(strtolower($call->name->toString()), self::WRITE_METHODS, true)) {
-                $count++;
+            if (! $call->name instanceof Node\Identifier) {
+                continue;
             }
+
+            if (! in_array(strtolower($call->name->toString()), self::WRITE_METHODS, true)) {
+                continue;
+            }
+
+            if (strtolower($call->name->toString()) === 'delete' && $this->isFilesystemOperation($call)) {
+                continue;
+            }
+
+            $count++;
         }
 
         foreach ($finder->findInstanceOf($statements, Node\Expr\StaticCall::class) as $call) {
@@ -112,6 +122,32 @@ final class MissingTransactionAnalyzer extends BaseAnalyzer implements AnalyzerI
         }
 
         return $count;
+    }
+
+    private function isFilesystemOperation(Node\Expr\MethodCall $call): bool
+    {
+        return $this->isFilesystemReceiver($call->var);
+    }
+
+    private function isFilesystemReceiver(Node\Expr $expression): bool
+    {
+        if ($expression instanceof Node\Expr\StaticCall && $expression->class instanceof Node\Name) {
+            $class = strtolower($expression->class->getLast());
+
+            return in_array($class, ['storage', 'file'], true);
+        }
+
+        if ($expression instanceof Node\Expr\MethodCall
+            && $expression->name instanceof Node\Identifier
+            && strtolower($expression->name->toString()) === 'disk') {
+            return true;
+        }
+
+        if ($expression instanceof Node\Expr\MethodCall) {
+            return $this->isFilesystemReceiver($expression->var);
+        }
+
+        return false;
     }
 
     /**
