@@ -107,6 +107,54 @@ final class MethodFeatureExtractorTest extends TestCase
         self::assertSame(2.0, $features['mutating_db_calls']);
     }
 
+    public function test_ignores_this_delegation_and_scalar_tuple_returns(): void
+    {
+        $features = $this->extractFeatures(<<<'PHP'
+            <?php
+
+            namespace App\Http\Controllers;
+
+            final class CheckoutController
+            {
+                public function store(): mixed
+                {
+                    return $this->finalizar($request, $items);
+                }
+
+                protected function cuponDeSesion(float $subtotal): array
+                {
+                    if (! session('cupon')) {
+                        return [null, 0.0];
+                    }
+
+                    return ['SAVE10', 5.0];
+                }
+            }
+            PHP, 'app/Http/Controllers/CheckoutController.php', 'store');
+
+        self::assertSame(0.0, $features['direct_model_returns']);
+
+        $helperFeatures = $this->extractFeatures(<<<'PHP'
+            <?php
+
+            namespace App\Http\Controllers;
+
+            final class CheckoutController
+            {
+                protected function cuponDeSesion(float $subtotal): array
+                {
+                    if (! session('cupon')) {
+                        return [null, 0.0];
+                    }
+
+                    return ['SAVE10', 5.0];
+                }
+            }
+            PHP, 'app/Http/Controllers/CheckoutController.php', 'cuponDeSesion');
+
+        self::assertSame(0.0, $helperFeatures['direct_model_returns']);
+    }
+
     /**
      * @return array<string, float>
      */

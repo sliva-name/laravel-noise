@@ -87,7 +87,32 @@ final class MethodFeatureExtractor
             'resource_wrapped_returns' => (float) $this->countResourceWrappedReturns($finder, $statements),
             'inertia_renders' => (float) $this->countInertiaRenders($finder, $statements),
             'mutating_db_calls' => (float) $this->countMutatingDbCalls($finder, $statements),
+            'simple_form_handler' => $this->simpleFormHandlerScore($file, $method, $finder, $statements),
         ];
+    }
+
+    /**
+     * @param  list<Node\Stmt>  $statements
+     */
+    private function simpleFormHandlerScore(PhpFile $file, Node\Stmt\ClassMethod $method, NodeFinder $finder, array $statements): float
+    {
+        if (! $this->isControllerMethod($file)) {
+            return 0.0;
+        }
+
+        $lines = $method->getEndLine() - $method->getStartLine() + 1;
+        $validateCalls = $this->countValidateCalls($finder, $statements);
+        $mutatingDbCalls = $this->countMutatingDbCalls($finder, $statements);
+        $returnStatements = count($finder->findInstanceOf($statements, Node\Stmt\Return_::class));
+
+        if ($validateCalls >= 1
+            && $lines <= 25
+            && $mutatingDbCalls <= 1
+            && $returnStatements <= 2) {
+            return 1.0;
+        }
+
+        return 0.0;
     }
 
     /**
@@ -270,7 +295,14 @@ final class MethodFeatureExtractor
                 continue;
             }
 
-            if ($this->isWebResponseExpression($return->expr) || $this->isResourceExpression($return->expr)) {
+            if ($this->isWebResponseExpression($return->expr)
+                || $this->isResourceExpression($return->expr)
+                || $this->isDelegatedReturn($return->expr)) {
+                continue;
+            }
+
+            if ($return->expr instanceof Node\Expr\Array_
+                && $this->isScalarArrayReturn($return->expr)) {
                 continue;
             }
 
@@ -283,6 +315,44 @@ final class MethodFeatureExtractor
         }
 
         return $count;
+    }
+
+    private function isDelegatedReturn(Node\Expr $expression): bool
+    {
+        if (! $expression instanceof Node\Expr\MethodCall) {
+            return false;
+        }
+
+        return $expression->var instanceof Node\Expr\Variable
+            && is_string($expression->var->name)
+            && strtolower($expression->var->name) === 'this';
+    }
+
+    private function isScalarArrayReturn(Node\Expr\Array_ $array): bool
+    {
+        if ($array->items === []) {
+            return true;
+        }
+
+        foreach ($array->items as $item) {
+            if (! $this->isScalarExpression($item->value)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private function isScalarExpression(Node\Expr $expression): bool
+    {
+        if ($expression instanceof Node\Scalar\String_
+            || $expression instanceof Node\Scalar\LNumber
+            || $expression instanceof Node\Scalar\DNumber) {
+            return true;
+        }
+
+        return $expression instanceof Node\Expr\ConstFetch
+            && in_array(strtolower($expression->name->toString()), ['null', 'true', 'false'], true);
     }
 
     /**

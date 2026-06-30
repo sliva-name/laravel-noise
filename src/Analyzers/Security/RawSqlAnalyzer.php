@@ -51,13 +51,23 @@ final class RawSqlAnalyzer extends BaseAnalyzer implements AnalyzerInterface
                 continue;
             }
 
+            $reportedLines = [];
+
             foreach ($this->findRawSqlCalls($finder, $file) as $call) {
                 $dynamic = $this->usesDynamicSql($call['node']);
+                $severity = $dynamic ? Severity::Critical : Severity::Warning;
+                $lineKey = $file->relativePath.':'.$call['line'].':'.$severity->value;
+
+                if (isset($reportedLines[$lineKey])) {
+                    continue;
+                }
+
+                $reportedLines[$lineKey] = true;
 
                 $issues[] = $this->issue(
                     $this->id(),
                     $this->category(),
-                    $dynamic ? Severity::Critical : Severity::Warning,
+                    $severity,
                     $dynamic ? 'Raw SQL usage requires review' : 'Static raw SQL usage',
                     $dynamic
                         ? 'Raw SQL can bypass query binding and increase SQL injection risk when user input is interpolated.'

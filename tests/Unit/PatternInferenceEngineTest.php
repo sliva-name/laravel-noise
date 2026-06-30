@@ -278,6 +278,115 @@ final class PatternInferenceEngineTest extends TestCase
         self::assertSame(array_unique($methods), $methods);
     }
 
+    public function test_prefers_form_request_for_simple_inline_validation(): void
+    {
+        $relativePath = 'app/Http/Controllers/Auth/PasswordController.php';
+        $project = new ProjectIndex([
+            $this->phpFile(<<<'PHP'
+                <?php
+
+                namespace App\Http\Controllers\Auth;
+
+                final class PasswordController
+                {
+                    public function update(): void
+                    {
+                        $validated = request()->validate([
+                            'current_password' => ['required', 'current_password'],
+                            'password' => ['required', 'confirmed'],
+                        ]);
+
+                        request()->user()->update([
+                            'password' => bcrypt($validated['password']),
+                        ]);
+                    }
+                }
+                PHP, $relativePath),
+        ], []);
+
+        $issues = [
+            new Issue(
+                ruleId: 'best-practices.missing-form-request',
+                category: Category::BestPractices,
+                severity: Severity::Info,
+                title: 'Inline validation in controller',
+                message: 'Use a Form Request.',
+                location: new Location($relativePath, 18),
+            ),
+        ];
+
+        $engine = new PatternInferenceEngine(
+            new MethodFeatureExtractor,
+            PatternModel::fromPath(__DIR__.'/../../resources/pattern-model.json'),
+        );
+
+        $suggestions = $engine->infer($project, $issues, 0.55, 5);
+
+        self::assertNotSame([], $suggestions);
+        self::assertSame('form_request', $suggestions[0]->pattern);
+    }
+
+    public function test_still_prefers_action_for_complex_controller_with_inline_validation(): void
+    {
+        $relativePath = 'app/Http/Controllers/CarritoController.php';
+        $project = new ProjectIndex([
+            $this->phpFile(<<<'PHP'
+                <?php
+
+                namespace App\Http\Controllers;
+
+                final class CarritoController
+                {
+                    public function store(): mixed
+                    {
+                        $data = request()->validate([
+                            'producto_id' => 'required',
+                            'talla' => 'required',
+                            'cantidad' => 'required|integer|min:1',
+                        ]);
+
+                        if ($invalid) {
+                            return back()->with('error', 'nope');
+                        }
+
+                        if ($anotherInvalid) {
+                            return back()->with('error', 'still nope');
+                        }
+
+                        if ($yetAnother) {
+                            return back()->with('error', 'nope again');
+                        }
+
+                        Carrito::agregar($producto, $data['talla'], $data['cantidad']);
+
+                        return back()->with('message', 'ok');
+                    }
+                }
+                PHP, $relativePath),
+        ], []);
+
+        $issues = [
+            new Issue(
+                ruleId: 'best-practices.missing-form-request',
+                category: Category::BestPractices,
+                severity: Severity::Info,
+                title: 'Inline validation in controller',
+                message: 'Use a Form Request.',
+                location: new Location($relativePath, 23),
+            ),
+        ];
+
+        $engine = new PatternInferenceEngine(
+            new MethodFeatureExtractor,
+            PatternModel::fromPath(__DIR__.'/../../resources/pattern-model.json'),
+        );
+
+        $suggestions = $engine->infer($project, $issues, 0.55, 5);
+
+        self::assertNotSame([], $suggestions);
+        self::assertSame('action', $suggestions[0]->pattern);
+    }
+
     private function phpFile(string $contents, string $relativePath = 'app/Example.php'): PhpFile
     {
         $ast = (new ParserFactory)->createForNewestSupportedVersion()->parse($contents) ?? [];

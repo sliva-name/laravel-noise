@@ -19,7 +19,8 @@
         "direct_model_returns": { "max": 3 },
         "resource_wrapped_returns": { "max": 3 },
         "inertia_renders": { "max": 2 },
-        "mutating_db_calls": { "max": 4 }
+        "mutating_db_calls": { "max": 4 },
+        "simple_form_handler": { "max": 1 }
     },
     "patterns": {
         "strategy": {
@@ -45,7 +46,8 @@
                 "validate_calls": 1.5,
                 "return_statements": 0.8,
                 "is_controller_method": 2.5,
-                "inertia_renders": -1.0
+                "inertia_renders": -1.0,
+                "simple_form_handler": -2.5
             }
         },
         "repository": {
@@ -108,10 +110,13 @@
             "title": "Form Request",
             "description": "Move inline validation into a dedicated Form Request class.",
             "recommendation": "Create a Form Request with rules() and authorize() instead of validating inside the controller.",
-            "bias": -1.8,
+            "bias": -1.4,
             "weights": {
-                "validate_calls": 2.8,
-                "is_controller_method": 2.0
+                "validate_calls": 3.2,
+                "is_controller_method": 2.0,
+                "lines": -1.2,
+                "mutating_db_calls": -1.5,
+                "simple_form_handler": 2.8
             }
         },
         "policy": {
@@ -178,8 +183,8 @@
             "action": 0.12
         },
         "best-practices.missing-form-request": {
-            "form_request": 0.22,
-            "action": 0.06
+            "form_request": 0.50,
+            "action": -0.40
         },
         "best-practices.silent-failure": {
             "extract_method": 0.05

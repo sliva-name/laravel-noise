@@ -52,6 +52,26 @@ final class RawSqlAnalyzerTest extends TestCase
         self::assertSame('warning', $issues[0]->severity->value);
     }
 
+    public function test_reports_one_issue_for_multiple_raw_fragments_on_same_line(): void
+    {
+        $issues = (new RawSqlAnalyzer)->analyze($this->analysisContext(<<<'PHP'
+            <?php
+
+            use Illuminate\Support\Facades\DB;
+
+            final class ReportRepository
+            {
+                public function totals(): void
+                {
+                    DB::table('orders')->select(DB::raw('DATE(created_at) as dia'), DB::raw('SUM(total) as total'), DB::raw('COUNT(*) as pedidos'));
+                }
+            }
+            PHP, 'app/Repositories/ReportRepository.php'));
+
+        self::assertCount(1, $issues);
+        self::assertSame('warning', $issues[0]->severity->value);
+    }
+
     public function test_reports_critical_for_dynamic_raw_sql(): void
     {
         $issues = (new RawSqlAnalyzer)->analyze($this->analysisContext(<<<'PHP'
